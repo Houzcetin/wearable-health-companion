@@ -28,6 +28,7 @@ Copy `.env.example` to `.env` and fill in the values. Never commit `.env`.
 
 ## Docs
 - [Plan and roadmap](docs/PLAN.md)
+- [Setup: project IDs and console steps](docs/SETUP.md)
 
 ## Rules we follow
 - This repo is our own work. No code is copied from other teams.
