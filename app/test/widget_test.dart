@@ -9,7 +9,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sleep'), findsOneWidget);
-    expect(find.text('Pip · Level 1'), findsOneWidget);
+    expect(find.text('Backend not configured'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.emoji_events_outlined));
     await tester.pumpAndSettle();

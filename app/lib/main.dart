@@ -9,22 +9,25 @@ import 'core/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Env.hasBackend) {
-    await Supabase.initialize(url: Env.supabaseUrl, publishableKey: Env.supabasePublishableKey);
+    await Supabase.initialize(
+      url: Env.supabaseUrl,
+      publishableKey: Env.supabasePublishableKey,
+    );
   }
   runApp(const ProviderScope(child: HealthCompanionApp()));
 }
 
-class HealthCompanionApp extends StatelessWidget {
+class HealthCompanionApp extends ConsumerWidget {
   const HealthCompanionApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       title: 'Wearable Health Companion',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
-      routerConfig: router,
+      routerConfig: ref.watch(routerProvider),
     );
   }
 }

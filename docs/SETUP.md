@@ -53,6 +53,16 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 - The secret is read from `GOOGLE_OAUTH_CLIENT_SECRET` in `.env` when pushing; it is not in the file.
 - Other settings in `config.toml` were aligned with the hosted project's defaults so a push changes only what we intend. Always read the push preview before confirming.
 
+## Open items from the first flow (2026-11-12)
+- **Nonce check, unverified:** the app signs in natively with `google_sign_in` 7 and passes the ID token to Supabase without a nonce, as Supabase's Flutter guide shows. The project has `skip_nonce_check = false`. If sign-in fails on a device with a nonce error, set `skip_nonce_check = true` under `[auth.external.google]` and push the config.
+- **iOS:** `ios/Runner/Info.plist` still needs the reversed iOS client ID as a URL scheme for Google sign-in. iOS has not been built (needs a Mac).
+- **Google Health wire shapes:** 11 assumptions marked `UNVERIFIED` in `supabase/functions/_shared/google.ts` and `mapping.ts`. Fixtures are synthetic. Check them against a real account first.
+- **First sync takes several runs:** the 35-day backfill is 324 jobs; one `sync-worker` call handles at most 200 jobs or about 40 seconds.
+- **Scheduled sync:** calling `sync-worker` with an `sb_secret_` key in the `Authorization` header is rejected by the gateway ("Conflicting API keys"). Solve this when adding the cron job.
+
+## Demo data without a device
+`seed_demo_metrics(p_user_id, p_days)` is a service-role-only RPC that inserts rows flagged `is_demo`. It refuses if the user has real rows. The app shows a "Demo data" chip for such rows.
+
 ## Still to do elsewhere
 - `ANTHROPIC_API_KEY`: create a key in the Anthropic console with a spending limit. It is stored only as a Supabase secret and in `.env`, never in the app.
 - `HEALTH_WEBHOOK_SECRET`: generated when the webhook receiver is built (Stage 5).
