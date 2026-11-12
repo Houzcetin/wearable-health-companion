@@ -1,0 +1,32 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/exercise/dataPoints/run",
+      "exercise": {
+        "interval": {
+          "startTime": "2026-11-11T07:00:00Z",
+          "endTime": "2026-11-11T07:30:00Z",
+          "startUtcOffset": "10800s",
+          "endUtcOffset": "10800s"
+        },
+        "exerciseType": "RUNNING",
+        "displayName": "Running",
+        "metricsSummary": {}
+      }
+    },
+    {
+      "name": "users/me/dataTypes/exercise/dataPoints/walk",
+      "exercise": {
+        "interval": {
+          "startTime": "2026-11-11T16:00:00Z",
+          "endTime": "2026-11-11T16:20:00Z",
+          "startUtcOffset": "10800s",
+          "endUtcOffset": "10800s"
+        },
+        "exerciseType": "WALKING",
+        "displayName": "Walking",
+        "metricsSummary": {}
+      }
+    }
+  ]
+}

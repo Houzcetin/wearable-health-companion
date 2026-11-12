@@ -1,0 +1,47 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/sleep/dataPoints/sleep-1",
+      "sleep": {
+        "interval": {
+          "startTime": "2026-11-10T20:00:00Z",
+          "endTime": "2026-11-11T04:00:00Z",
+          "startUtcOffset": "10800s",
+          "endUtcOffset": "10800s"
+        },
+        "type": "STAGES",
+        "metadata": {
+          "mainSleep": true,
+          "processed": true
+        },
+        "summary": {
+          "minutesInSleepPeriod": "480",
+          "minutesAsleep": "450",
+          "minutesAwake": "30",
+          "stagesSummary": [
+            {
+              "type": "DEEP",
+              "minutes": "90",
+              "count": "4"
+            },
+            {
+              "type": "REM",
+              "minutes": "100",
+              "count": "5"
+            },
+            {
+              "type": "LIGHT",
+              "minutes": "260",
+              "count": "8"
+            },
+            {
+              "type": "AWAKE",
+              "minutes": "30",
+              "count": "7"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

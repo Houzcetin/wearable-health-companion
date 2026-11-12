@@ -1,0 +1,15 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/daily-heart-rate-variability/dataPoints/hrv",
+      "dailyHeartRateVariability": {
+        "date": {
+          "year": 2026,
+          "month": 11,
+          "day": 11
+        },
+        "averageHeartRateVariabilityMilliseconds": 47.3
+      }
+    }
+  ]
+}

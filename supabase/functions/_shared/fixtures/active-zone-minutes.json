@@ -1,0 +1,25 @@
+{
+  "rollupDataPoints": [
+    {
+      "civilStartTime": {
+        "date": {
+          "year": 2026,
+          "month": 11,
+          "day": 11
+        }
+      },
+      "civilEndTime": {
+        "date": {
+          "year": 2026,
+          "month": 11,
+          "day": 12
+        }
+      },
+      "activeZoneMinutes": {
+        "sumInFatBurnHeartZone": "10",
+        "sumInCardioHeartZone": "20",
+        "sumInPeakHeartZone": "6"
+      }
+    }
+  ]
+}

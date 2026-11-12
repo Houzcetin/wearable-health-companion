@@ -1,0 +1,40 @@
+{
+  "dataPoints": [
+    {
+      "name": "users/me/dataTypes/activity-level/dataPoints/moderate",
+      "activityLevel": {
+        "interval": {
+          "startTime": "2026-11-11T10:00:00Z",
+          "endTime": "2026-11-11T10:20:00Z",
+          "startUtcOffset": "10800s",
+          "endUtcOffset": "10800s"
+        },
+        "activityLevelType": "MODERATELY_ACTIVE"
+      }
+    },
+    {
+      "name": "users/me/dataTypes/activity-level/dataPoints/very",
+      "activityLevel": {
+        "interval": {
+          "startTime": "2026-11-11T10:15:00Z",
+          "endTime": "2026-11-11T10:30:00Z",
+          "startUtcOffset": "10800s",
+          "endUtcOffset": "10800s"
+        },
+        "activityLevelType": "VERY_ACTIVE"
+      }
+    },
+    {
+      "name": "users/me/dataTypes/activity-level/dataPoints/sedentary",
+      "activityLevel": {
+        "interval": {
+          "startTime": "2026-11-11T11:00:00Z",
+          "endTime": "2026-11-11T12:00:00Z",
+          "startUtcOffset": "10800s",
+          "endUtcOffset": "10800s"
+        },
+        "activityLevelType": "SEDENTARY"
+      }
+    }
+  ]
+}
