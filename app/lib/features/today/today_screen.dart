@@ -256,6 +256,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             : _duration(current!.sleepMinutes!),
         comparison: _comparison(summary.sleep, 'min'),
         delta: summary.sleep.delta,
+        onTap: () => context.go('/trends?metric=sleep',
+          extra: DateTime.now().microsecondsSinceEpoch),
       ),
       _MetricCard(
         icon: Icons.favorite_outline,
@@ -269,6 +271,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             : 'Resting heart rate · HRV ${_number(current!.hrvMs!)} ms',
         comparison: _comparison(summary.restingHeartRate, 'bpm'),
         delta: summary.restingHeartRate.delta,
+        onTap: () => context.go('/trends?metric=heart',
+          extra: DateTime.now().microsecondsSinceEpoch),
       ),
       _MetricCard(
         icon: Icons.directions_walk,
@@ -282,6 +286,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             : '${current!.activeZoneMin} active zone min',
         comparison: _comparison(summary.steps, 'steps'),
         delta: summary.steps.delta,
+        onTap: () => context.go('/trends?metric=steps',
+          extra: DateTime.now().microsecondsSinceEpoch),
       ),
       const SizedBox(height: 4),
       if (!connected)
@@ -363,7 +369,7 @@ String _comparison(
 };
 String _lastSynced(DateTime? timestamp) => timestamp == null
     ? 'Last synced: never'
-    : 'Last synced: ${DateFormat('MMM d, h:mm a', 'en').format(timestamp.toLocal())}';
+    : 'Last synced: ${DateFormat('MMM d, h:mm a', 'en_US').format(timestamp.toLocal())}';
 
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
@@ -374,53 +380,59 @@ class _MetricCard extends StatelessWidget {
     required this.comparison,
     this.secondary,
     this.delta,
+    this.onTap,
   });
   final IconData icon;
   final Color color;
   final String title, value, comparison;
   final String? secondary;
   final double? delta;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 20, color: color),
-                const SizedBox(width: 8),
-                Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
-                Text(value, style: theme.textTheme.titleLarge),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                if (delta != null && delta != 0) ...[
-                  Icon(
-                    delta! < 0 ? Icons.arrow_downward : Icons.arrow_upward,
-                    size: 16,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: color),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
+                  Text(value, style: theme.textTheme.titleLarge),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  if (delta != null && delta != 0) ...[
+                    Icon(
+                      delta! < 0 ? Icons.arrow_downward : Icons.arrow_upward,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text(comparison, style: theme.textTheme.bodyMedium),
+                  ),
+                ],
+              ),
+              if (secondary != null)
+                Text(
+                  secondary!,
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 4),
-                ],
-                Expanded(
-                  child: Text(comparison, style: theme.textTheme.bodyMedium),
                 ),
-              ],
-            ),
-            if (secondary != null)
-              Text(
-                secondary!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

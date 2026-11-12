@@ -75,8 +75,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, shell) => _Shell(shell: shell),
         branches: [
           _branch('/today', const TodayScreen()),
-          _branch('/trends', const TrendsScreen()),
-          _branch('/coach', const CoachScreen()),
+          StatefulShellBranch(routes: [GoRoute(
+            path: '/trends',
+            builder: (_, state) => TrendsScreen(
+              initialMetric: state.uri.queryParameters['metric'],
+              launchId: state.extra,
+            ),
+          )]),
+          StatefulShellBranch(routes: [GoRoute(
+            path: '/coach',
+            builder: (_, state) => CoachScreen(
+              initialQuestion: state.uri.queryParameters['q'],
+              launchId: state.extra,
+            ),
+          )]),
           _branch('/play', const PlayScreen()),
           _branch('/settings', const SettingsScreen()),
         ],

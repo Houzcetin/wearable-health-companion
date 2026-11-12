@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -40,6 +42,11 @@ abstract class HealthRepository {
   Future<void> connect();
   Future<SyncResult> requestSync();
   Future<List<DailyMetrics>> fetchDailyMetrics(String userId, DateTime today);
+  Future<List<DailyMetrics>> fetchRange(
+    String userId, DateTime start, DateTime end,
+  );
+  Future<String> exportData();
+  Future<void> deleteData({required bool account});
 }
 
 class SupabaseHealthRepository implements HealthRepository {
@@ -104,6 +111,13 @@ class SupabaseHealthRepository implements HealthRepository {
     DateTime today,
   ) async {
     final end = civilDate(today);
+    return fetchRange(userId, end.subtract(const Duration(days: 28)), end);
+  }
+
+  @override
+  Future<List<DailyMetrics>> fetchRange(
+    String userId, DateTime start, DateTime end,
+  ) async {
     final rows = await _client
         .from('daily_metrics')
         .select(
@@ -112,10 +126,45 @@ class SupabaseHealthRepository implements HealthRepository {
           'active_min,total_calories,exercise_count,is_demo,updated_at',
         )
         .eq('user_id', userId)
-        .gte('date', dateKey(end.subtract(const Duration(days: 28))))
-        .lte('date', dateKey(end))
+        .gte('date', dateKey(civilDate(start)))
+        .lte('date', dateKey(civilDate(end)))
         .order('date');
     return rows.map(DailyMetrics.fromJson).toList();
+  }
+
+  @override
+  Future<String> exportData() async {
+    try {
+      final response = await _client.functions.invoke('export-data');
+      if (response.status != 200 || response.data is! Map) {
+        throw const FormatException('Unexpected export response');
+      }
+      return jsonEncode(response.data);
+    } catch (_) {
+      throw const UserFacingException(
+        'Could not export your data. Check your connection and try again.',
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteData({required bool account}) async {
+    try {
+      final scope = account ? 'account' : 'health';
+      final response = await _client.functions.invoke(
+        'delete-account', body: {'scope': scope},
+      );
+      if (response.status != 200 ||
+          response.data is! Map || response.data['deleted'] != scope) {
+        throw const FormatException('Unexpected deletion response');
+      }
+    } catch (_) {
+      throw UserFacingException(
+        account
+            ? 'Could not delete your account. Please try again.'
+            : 'Could not delete your health data. Please try again.',
+      );
+    }
   }
 }
 

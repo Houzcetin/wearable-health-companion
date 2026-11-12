@@ -37,26 +37,59 @@ Data reaches the API only after the device syncs through the Google Health app.
 Some types depend on the device. The Fitbit Air may not report SpO2 or HRV, so the UI hides cards that have no data.
 
 ## Webhooks
-- Create a subscriber once per GCP project:
-  ```
-  POST /v4/projects/83744150851/subscribers?subscriberId=wearable-companion-dev
-  ```
-  - Use the project **number**, not the project ID.
-  - The body has `endpointUri`, `subscriberConfigs` (one per data type, with policy `AUTOMATIC`) and `endpointAuthorization` (our secret).
-  - PATCH replaces `subscriberConfigs` completely; it doesn't merge.
-- **Endpoint verification:** Google sends two POSTs with the body `{"type":"verification"}`.
-  1. The first carries our Authorization header. We must answer 200 or 201.
-  2. The second has no credentials. We must answer 401 or 403.
-- **Notifications:**
-  - They arrive as a JSON array of up to 99 items.
-  - Each item has `healthUserId`, `dataType`, `operation` (UPSERT/DELETE) and `intervals` (civil dates).
-  - They carry **no values**: we enqueue a job, then fetch the data ourselves.
-  - The user-deleted and user-revoked events mean we mark the connection as revoked.
-- **Signature:** the `GOOGLE-HEALTH-API-SIGNATURE` header is ECDSA P-256 / SHA-256 in Tink format. The public keyset is at `https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json`. Keys rotate every 30 days, so cache the keyset for a short time.
-- **Responses and retries:** reply **204 immediately**. Any other response causes retries with backoff for up to 7 days, so duplicates happen. Our partial unique index on `sync_queue` collapses them.
+- Create the subscriber with the GCP project **number**, endpoint URI, per-type
+  `AUTOMATIC` subscriber configs and `endpointAuthorization.secret = "Bearer " +
+  HEALTH_WEBHOOK_SECRET`. PATCH replaces the entire subscriber config list.
+- Verification is POST `{"type":"verification"}` with User-Agent
+  `Google-Health-API-Webhooks`: configured Authorization returns 200; missing
+  credentials return 401. An unset server secret fails closed with 500.
+- A notification is one object or an array of at most 99 objects. Each object's
+  top-level `data` contains `version`, `clientProvidedSubscriptionName`,
+  `healthUserId`, `operation` (UPSERT/DELETE), `dataType`, `intervals`, and optional
+  `recordId`. The receiver expands the date parts of
+  `civilIso8601TimeInterval.startTime/endTime` inclusively, at most 14 distinct dates
+  per user/type. Sleep includes the wake-up date. Notifications contain no health values.
+- Notifications require the exact Authorization secret plus
+  `GOOGLE-HEALTH-API-SIGNATURE`. Base64 decoding yields a 5-byte Tink prefix
+  (version byte plus big-endian key ID) and a DER ECDSA P-256/SHA-256 signature over
+  the **raw body bytes**. The receiver converts DER to raw r||s for WebCrypto.
+- The [public Tink keyset](https://www.gstatic.com/googlehealthapi/webhooks/webhooks_public_keyset.json)
+  is cached for one hour; an unknown key ID triggers one refetch. The minimal
+  EcdsaPublicKey protobuf parser reads x/y from fields 3/4, skipping params.
+  **UNVERIFIED:** confirm this field layout and signature envelope on a live notification.
+- The handler groups by health user/type and calls `enqueue_webhook_job`. Unknown
+  types and inactive connections are ignored. The pending queue index collapses retries.
+  Enqueue completes **before** empty 204; the receiver never invokes the worker.
+  Signed malformed JSON returns 204 with a warning code. Invalid signatures return
+  401; enqueue failures return 500 for retry.
+- Source contract: [Google Health webhooks](https://developers.google.com/health/webhooks).
+
+## Coach tools (Stage 5)
+- `coach` accepts an authenticated POST with a 1–500 character `question` and optional
+  UUID `threadId`. It requires AI consent and allows 30 questions in a rolling
+  24 hours (`COACH_DAILY_LIMIT` overrides). Accepted questions count even if a model call fails.
+- `get_daily_metrics {start_date, end_date}` returns allowed daily fields,
+  `missing_dates` and `is_demo`. Inclusive ranges are at most 92 days.
+- `compare_periods {metric, a_start, a_end, b_start, b_end}` supports sleep duration,
+  resting HR, HRV, steps, active zone minutes, deep/REM/awake minutes. Each period has
+  `nights_with_data`, missing dates, mean and median. Results include `difference`
+  (a minus b), up to three `top_contributors` ranked by absolute deviation from b's
+  mean, `enough_data` (at least four observations in each period), and `is_demo`.
+  Null/missing values are excluded; computed statistics are rounded to one decimal.
+- Both tools filter by the authenticated user. The response is
+  `{threadId, answer, facts, isDemo}`; assistant `facts_json` stores exact tool
+  inputs/results shown to the model. Prior history is the last six text messages.
+- The official Anthropic SDK uses `COACH_MODEL` (default `claude-opus-5-5`), medium
+  effort and the specified server fallback beta. The manual loop makes at most six
+  calls, preserving every assistant block. Live answer quality remains unverified.
 
 ## Verification and limits
 - Most Google Health scopes are **restricted**. An unverified app is limited to 100 users, which is enough for the demo.
 - Full verification needs a CASA security assessment ($500–4,500, 2–6 weeks). Out of scope for now.
 - ⚠️ When the OAuth consent screen is in "Testing" status, refresh tokens expire after about 7 days. Check this in week 1. Before onboarding the 5 testers, either switch the app to "In production" (unverified, testers see a warning screen) or plan weekly re-consent.
 - The app must show an in-app disclosure of health data use before consent. A privacy policy alone isn't enough.
+
+## Stage 5 findings (2026-11-13)
+- Webhook subscriber creation worked with a gcloud user token plus `x-goog-user-project`; the response is an already-done operation whose `response.state` is `ACTIVE` once both verification POSTs pass.
+- The public keyset at gstatic parsed as expected: `ENABLED`, `TINK` prefix, `type.googleapis.com/google.crypto.tink.EcdsaPublicKey`, with x and y in protobuf fields 3 and 4. A real signed notification has not been seen yet.
+- Coach: Claude API with two server-side tools, `get_daily_metrics(start_date, end_date)` and `compare_periods(metric, a_start, a_end, b_start, b_end)`. Tool results are stored in `coach_messages.facts_json` and shown in the app under "Numbers used". The app shows plain text, so the prompt forbids Markdown.

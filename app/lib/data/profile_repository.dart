@@ -7,6 +7,7 @@ class Profile {
     required this.timezone,
     this.displayName,
     this.healthConsentAt,
+    this.coachConsentAt,
   });
   factory Profile.fromJson(Map<String, dynamic> json) => Profile(
     userId: json['user_id'] as String,
@@ -15,11 +16,14 @@ class Profile {
     healthConsentAt: json['health_consent_at'] == null
         ? null
         : DateTime.parse(json['health_consent_at'] as String),
+    coachConsentAt: json['coach_consent_at'] == null
+        ? null
+        : DateTime.parse(json['coach_consent_at'] as String),
   );
   final String userId;
   final String timezone;
   final String? displayName;
-  final DateTime? healthConsentAt;
+  final DateTime? healthConsentAt, coachConsentAt;
   bool get hasHealthConsent => healthConsentAt != null;
 }
 
@@ -27,6 +31,7 @@ abstract class ProfileRepository {
   /// Reads the trigger-created row and updates only timezone, if needed.
   Future<Profile> fetchProfile(String userId);
   Future<void> grantHealthConsent(String userId);
+  Future<void> grantCoachConsent(String userId);
 }
 
 class SupabaseProfileRepository implements ProfileRepository {
@@ -44,7 +49,7 @@ class SupabaseProfileRepository implements ProfileRepository {
   Future<Profile> fetchProfile(String userId) async {
     final row = await _client
         .from('profiles')
-        .select('user_id,display_name,timezone,health_consent_at')
+        .select('user_id,display_name,timezone,health_consent_at,coach_consent_at')
         .eq('user_id', userId)
         .single();
     final timezone = await _deviceTimezone();
@@ -62,4 +67,9 @@ class SupabaseProfileRepository implements ProfileRepository {
   Future<void> grantHealthConsent(String userId) => _client
       .from('consent_events')
       .insert({'user_id': userId, 'kind': 'health_data', 'granted': true});
+
+  @override
+  Future<void> grantCoachConsent(String userId) => _client
+      .from('consent_events')
+      .insert({'user_id': userId, 'kind': 'ai_coach', 'granted': true});
 }

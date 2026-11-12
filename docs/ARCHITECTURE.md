@@ -27,10 +27,8 @@ We're building a better companion app for Google's $99 Fitbit Air (launched May 
    │                                            │ health-oauth-start       │──► Google OAuth consent
    ├── open browser ───────────────────────────►│ health-oauth-callback    │◄── code → tokens (stored encrypted)
    │                                            │ health-webhook           │◄── Google Health webhooks
-   ├── invoke ─────────────────────────────────►│ sync-worker (pg_cron 1m) │──► health.googleapis.com/v4 dailyRollUp
-   │                                            │ nightly-reconcile (cron) │
-   ├── invoke (streaming) ─────────────────────►│ coach-chat               │──► Claude API (tool use over SQL)
-   │                                            │ weekly-insight (cron)    │
+   ├── invoke ─────────────────────────────────►│ sync-worker (cron 15m) │──► health.googleapis.com/v4 dailyRollUp
+   ├── invoke ─────────────────────────────────►│ coach                    │──► Claude SDK (daily-data tools)
    └── invoke ─────────────────────────────────►│ export-data / delete-account │
                                                 └──────────────────────────┘
 ```
@@ -41,8 +39,9 @@ We're building a better companion app for Google's $99 Fitbit Air (launched May 
 
 **Sync pipeline:**
 - `health-webhook` checks the Authorization header and signature, inserts rows into `sync_queue` (idempotent unique key on user, data type and date), and returns 204. It does no heavy work.
-- `sync-worker` runs every minute via pg_cron + pg_net. It claims queue rows, refreshes the access token, calls `dailyRollUp` or `list` (per data type) for the affected dates, upserts into `daily_metrics`, and records `last_synced_at`.
-- `nightly-reconcile` re-pulls the last 3 days for every connected user, as a safety net for missed webhooks.
+- `scheduled-sync` calls `public.run_scheduled_sync()` every 15 minutes via pg_cron. It queues all nine types for today and the previous two local dates of every active connection, then invokes `sync-worker` once through pg_net. Vault supplies `project_url` and `sync_cron_secret`; the matching function setting is `SYNC_CRON_SECRET`. Missing Vault configuration produces a notice after enqueuing.
+- `sync-worker` accepts the constant-time cron secret, service-role bearer, or verified user JWT. A call runs one bounded worker pass, including when work remains. It refreshes access, reads the affected daily dates, upserts aggregates and records `last_synced_at`.
+- Webhooks enqueue only; scheduled re-pulls cover missed notifications. First connection still uses backfill plus manual pulls.
 - The app has a "Sync now" control that queues today's date, so the live-sync demo doesn't depend on webhook timing.
 - We store **daily aggregates only**. Raw intraday streams are never stored.
 
@@ -61,15 +60,29 @@ We're building a better companion app for Google's $99 Fitbit Air (launched May 
 The service role writes `daily_metrics` and `health_connections`. Clients can only read them.
 
 ## 4. AI coach (Claude)
-- **Model:** `claude-sonnet-5-5` for chat and weekly insights (confirm the current ID via the claude-api skill at implementation time). It's called only from Edge Functions; the API key never ships in the app.
-- **"Light RAG" = tool use over aggregates, not vector search.** Tools exposed to Claude:
-  - `get_daily_metrics(start, end, fields[])`
-  - `compare_periods(metric, period_a, period_b)`, which returns means, deltas, best and worst days
-  - `get_past_insights(n_weeks)`
-  Each call retrieves only the user's own rows, server-side, and never raw streams.
-- The system prompt is wellness-only: no diagnosis or medical claims, suggest seeing a clinician for concerning patterns, and cite the numbers for every claim.
-- Each response returns `facts_json` (the tool results it used). The app renders those as a "Numbers behind this" card under the answer, which delivers Demo Day target (c).
-- `weekly-insight` runs on cron every Monday per user, and is also triggerable from the app.
+- `coach` verifies the session, checks `coach_consent_at`, and enforces a rolling
+  24-hour question limit with `coach_messages_today` (default 30).
+- The official Anthropic SDK calls `COACH_MODEL`, default `claude-opus-5-5`, with
+  medium effort and server-side fallback. The manual loop makes at most six calls,
+  preserving thinking and every other assistant block unchanged.
+- Deterministic `get_daily_metrics` and `compare_periods` tools read only the user's
+  aggregates, validating inclusive ranges of at most 92 days. Comparisons exclude
+  missing values, require four observations per period and rank contributing dates.
+- The stable wellness-only prompt requires dates, numbers and missing-data/demo
+  disclosure, and forbids diagnosis, treatment advice and causal claims. Today,
+  timezone and demo context go in the first user message. Live quality needs evaluation.
+- The last six thread messages are loaded chronologically. Questions and answers
+  are stored in `coach_messages`; assistant `facts_json` contains exact tool results.
+  The JSON response supplies the answer and facts for the app's Numbers behind this card.
+- `export-data` paginates own records and projects connection status/timestamps/scopes.
+  Tokens, Vault IDs and health user IDs are excluded.
+- `delete-account` attempts Google token revocation before the service-only
+  `delete_user_health_data` RPC removes aggregates, queue, insights, messages,
+  feedback, connection and Vault token. Health-only deletion records withdrawal;
+  account deletion then removes consent rows and deletes the auth user, cascading
+  remaining rows.
+- All four new routes disable the gateway JWT check and perform their own session
+  or webhook-secret checks. All Stage 5 SQL helpers are service-role only.
 
 ## 4b. Game layer: character, points, streaks, tasks, friends
 **Principles**
@@ -130,7 +143,7 @@ health-app/
   app/                      # Flutter project (lib/features/{auth,today,trends,coach,play,settings}, lib/data/)
   supabase/
     migrations/20261106000000_init.sql
-    functions/{_shared,health-oauth-start,health-oauth-callback,health-webhook,sync-worker,nightly-reconcile,coach-chat,weekly-insight,export-data,delete-account}/
+    functions/{_shared,health-oauth-start,health-oauth-callback,health-webhook,sync-worker,coach,export-data,delete-account}/
     config.toml
   .env.example              # GOOGLE_CLIENT_ID/SECRET, HEALTH_WEBHOOK_SECRET, ANTHROPIC_API_KEY…
 ```

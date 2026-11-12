@@ -61,14 +61,32 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 - **iOS:** `ios/Runner/Info.plist` still needs the reversed iOS client ID as a URL scheme for Google sign-in. iOS has not been built (needs a Mac).
 - **Google Health wire shapes:** 11 assumptions marked `UNVERIFIED` in `supabase/functions/_shared/google.ts` and `mapping.ts`. Fixtures are synthetic. Check them against a real account first.
 - **First sync takes several runs:** the 35-day backfill is 324 jobs; one `sync-worker` call handles at most 200 jobs or about 40 seconds.
-- **Scheduled sync:** calling `sync-worker` with an `sb_secret_` key in the `Authorization` header is rejected by the gateway ("Conflicting API keys"). Solve this when adding the cron job.
+- **Scheduled sync:** solved in Stage 5. pg_cron calls `sync-worker` with an `x-cron-secret` header instead of a key in `Authorization` (see below).
 
 ## Demo data without a device
 `seed_demo_metrics(p_user_id, p_days)` is a service-role-only RPC that inserts rows flagged `is_demo`. It refuses if the user has real rows. The app shows a "Demo data" chip for such rows. Demo rows appear on Today even before Google Health is connected (only after health-data consent), with a "Sample data, not from your device" note.
 
-## Still to do elsewhere
-- `ANTHROPIC_API_KEY`: create a key in the Anthropic console with a spending limit. It is stored only as a Supabase secret and in `.env`, never in the app.
-- `HEALTH_WEBHOOK_SECRET`: generated when the webhook receiver is built (Stage 5).
+## Stage 5 backend (done 2026-11-13)
+**Function secrets** (`supabase secrets set`, values only in `.env`):
+- `ANTHROPIC_API_KEY`: the coach's Claude key. Set a spending limit in the Anthropic console.
+- `HEALTH_WEBHOOK_SECRET`: Google sends `Bearer <secret>` in `Authorization` on every webhook call.
+- `SYNC_CRON_SECRET`: pg_cron sends it to `sync-worker` in `x-cron-secret`.
+- Optional: `COACH_MODEL` (default `claude-opus-5-5`), `COACH_DAILY_LIMIT` (default 30 questions per 24 h).
+
+**Vault entries** (read by `run_scheduled_sync()`): `project_url` (`https://ftgozpdlwcoiwynqcslh.supabase.co`) and `sync_cron_secret` (same value as `SYNC_CRON_SECRET`). If either is missing, the cron job only enqueues and logs `scheduled_sync_missing_configuration`.
+
+**Cron job** `scheduled-sync`, every 15 minutes: queues the last 2 days for every active connection, then calls `sync-worker`. Check runs with:
+```sql
+select status, start_time from cron.job_run_details d join cron.job j using (jobid)
+ where j.jobname = 'scheduled-sync' order by start_time desc limit 5;
+```
+First run 2026-11-12 23:15 UTC: succeeded, `sync-worker` returned 200.
+
+**Webhook subscriber** `projects/83744150851/subscribers/whc-main`, created 2026-11-12 with gcloud user credentials (`x-goog-user-project: wearable-health-companion`). Endpoint `.../functions/v1/health-webhook`, nine data types, policy `AUTOMATIC`. State **ACTIVE**, so both verification calls passed. If `HEALTH_WEBHOOK_SECRET` changes, PATCH the subscriber's `endpointAuthorization` too.
+
+**Live checks (2026-11-13):** no session → 401 on `coach`, `export-data`, `delete-account`; webhook 401 without secret, 200 for verification with it, 401 for a bad signature. Export and both delete scopes were tested on throwaway email users (created and deleted again), never on a team account.
+
+**To verify with a real device:** real notification bodies and signatures; scheduled sync fetching real data; Google token revoke on a real connection.
 
 ## Teammate access
 Your teammate needs their own `.env`. Share it privately (not through the repo or chat). They also need to be invited to the Google Cloud project (IAM) and the Supabase organization (Team).

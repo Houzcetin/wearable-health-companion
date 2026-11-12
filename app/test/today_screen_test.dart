@@ -5,12 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wearable_companion/core/theme.dart';
+import 'package:wearable_companion/core/router.dart';
+import 'package:wearable_companion/features/trends/domain/trends.dart';
 import 'package:wearable_companion/data/daily_metrics.dart';
 import 'package:wearable_companion/data/health_repository.dart';
 import 'package:wearable_companion/data/providers.dart';
 import 'package:wearable_companion/features/today/today_screen.dart';
 
 import 'support/fake_repositories.dart';
+import 'support/stage5_harness.dart';
 
 void main() {
   Future<void> showToday(
@@ -256,4 +259,19 @@ void main() {
     expect(tester.getBottomRight(find.text('Sync now')).dy, lessThan(844));
     expect(tester.takeException(), isNull);
   });
+
+  for (final metric in {'Sleep': 'sleep', 'Heart': 'heart', 'Activity': 'steps'}.entries) {
+    testWidgets('tapping ${metric.key} opens its Week trend', (tester) async {
+      final container = await startStage5(tester);
+      await tester.tap(find.text(metric.key));
+      await tester.pumpAndSettle();
+      final uri = container.read(routerProvider).routeInformationProvider.value.uri;
+      expect(uri.toString(), '/trends?metric=${metric.value}');
+      expect(tester.widget<ChoiceChip>(find.widgetWithText(
+        ChoiceChip, metric.value == 'heart' ? 'Resting heart rate' :
+          metric.value == 'steps' ? 'Steps' : 'Sleep')).selected, isTrue);
+      expect(tester.widget<SegmentedButton<TrendRange>>(
+        find.byType(SegmentedButton<TrendRange>)).selected, {TrendRange.week});
+    });
+  }
 }

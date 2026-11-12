@@ -260,7 +260,7 @@ void main() {
     final healthFetches = health.fetches;
     auth.emit(const AppUser(id: 'user-a', email: 'reader@example.com'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Weekly and monthly charts'), findsOneWidget);
+    expect(find.textContaining('This week you averaged'), findsOneWidget);
     expect(profile.fetches, profileFetches);
     expect(health.fetches, healthFetches);
   });
