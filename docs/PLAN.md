@@ -37,7 +37,7 @@ Mascot, points, streaks, friend challenges, push notifications, Health Connect o
 - KVKK: explicit consent, a privacy notice and a delete option.
 - API keys in `.env` only. Spending limits on every service.
 - Both members commit regularly. README and architecture diagram in the repo.
-- **Independent repo and implementation.** We do not copy code from `algordeev/health-app` or any other team (no-code-sharing rule, p. 37). The clone in `health-app/` is reading material only; our repo starts empty.
+- **Our own team's work only.** `algordeev/health-app` belongs to our teammate (Aleksandr Gordeev), so its docs, schema and scaffold are our team's work and may be reused. We copy nothing from other teams (no-code-sharing rule, p. 37).
 
 ## How the coach answers "Why did I sleep badly this week?"
 1. **Compare periods.** This week against the user's usual (previous 28 days): sleep duration, efficiency, bedtime, wake time.
@@ -109,7 +109,7 @@ These need a real device or account, in Stages 1–3.
 - **Per-device coverage:** the docs name Fitbit Air only for sleep and SpO2. Confirm with real data that resting heart rate, HRV, steps and active zone minutes arrive.
 - **Number parity:** whether the API's daily values match the official app's morning screen.
 - **Unverified-app warning:** what testers see on the consent screen.
-- **Lecturer confirmation:** that reading another team's public repo for ideas is acceptable, provided no code is copied.
+- **Public team repo:** `algordeev/health-app` is public, so a second team on Project 15 could copy from it. Consider making it private.
 
 ## Weekly Google Drive report (PDF p. 39)
 Updated before every weekly 5-minute demo. Show working screens, not slides.
