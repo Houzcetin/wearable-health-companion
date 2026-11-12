@@ -95,6 +95,7 @@ void main() {
     'no_refresh_token': 'ongoing access',
     'exchange_failed': 'complete Google authorization',
     'identity_failed': 'identify your Google Health account',
+    'not_linked': 'no Google Health profile yet',
     'store_failed': 'save your connection',
   };
   for (final entry in reasons.entries) {

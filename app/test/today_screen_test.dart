@@ -58,16 +58,15 @@ void main() {
     );
     expect(find.text('6 h 38 min'), findsOneWidget);
   });
-  testWidgets('not connected offers connect action and fetches no metrics', (
-    tester,
-  ) async {
+  testWidgets('not connected offers connect action', (tester) async {
     final health = FakeHealthRepository(connection: null);
     await showToday(tester, health);
     expect(
       find.widgetWithText(FilledButton, 'Connect Google Health'),
       findsOneWidget,
     );
-    expect(health.fetches, 0);
+    // Rows are still fetched so demo data can show before a device exists.
+    expect(health.fetches, 1);
   });
   testWidgets('connection action navigates to connect', (tester) async {
     final auth = FakeAuthRepository();
@@ -115,6 +114,52 @@ void main() {
     await showToday(tester, FakeHealthRepository(rows: rows));
     expect(find.widgetWithText(Chip, 'Demo data'), findsOneWidget);
   });
+  testWidgets('half-unit differences from an even-length median are rounded', (
+    tester,
+  ) async {
+    final rows = [
+      for (var i = 1; i <= 8; i++)
+        DailyMetrics(
+          date: testToday.subtract(Duration(days: i)),
+          sleepMinutes: i.isEven ? 450 : 451,
+          restingHr: 60,
+          steps: i.isEven ? 8000 : 8001,
+        ),
+      DailyMetrics(
+        date: testToday,
+        sleepMinutes: 398,
+        restingHr: 60,
+        steps: 9000,
+      ),
+    ];
+    await showToday(tester, FakeHealthRepository(rows: rows));
+    expect(find.text('You slept 53 min less than your usual.'), findsOneWidget);
+    expect(find.text('1,000 steps above usual'), findsOneWidget);
+    expect(find.textContaining('.5'), findsNothing);
+  });
+
+  testWidgets('demo data shows before Google Health is connected', (
+    tester,
+  ) async {
+    final health = FakeHealthRepository(rows: history(demo: true))
+      ..connection = null;
+    await showToday(tester, health);
+    expect(find.text('Demo data'), findsOneWidget);
+    expect(find.text('Sample data, not from your device.'), findsOneWidget);
+    expect(find.text('Sync now'), findsNothing);
+  });
+
+  testWidgets('real rows without a connection still ask to connect', (
+    tester,
+  ) async {
+    final health = FakeHealthRepository(rows: history())..connection = null;
+    await showToday(tester, health);
+    expect(
+      find.text('Connect Google Health to see your daily summary.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('demo today shows chip', (tester) async {
     await showToday(tester, FakeHealthRepository(rows: history(demo: true)));
     expect(find.text('Demo data'), findsOneWidget);

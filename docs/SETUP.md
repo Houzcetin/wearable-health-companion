@@ -54,14 +54,17 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 - Other settings in `config.toml` were aligned with the hosted project's defaults so a push changes only what we intend. Always read the push preview before confirming.
 
 ## Open items from the first flow (2026-11-12)
-- **Nonce check, unverified:** the app signs in natively with `google_sign_in` 7 and passes the ID token to Supabase without a nonce, as Supabase's Flutter guide shows. The project has `skip_nonce_check = false`. If sign-in fails on a device with a nonce error, set `skip_nonce_check = true` under `[auth.external.google]` and push the config.
+- **Nonce check, verified on Android (2026-11-12):** native sign-in with `google_sign_in` 7 works with `skip_nonce_check = false`. Not yet checked on iOS.
+- **Emulator needs a Google Play image:** sign-in fails on images without the Play Store. Use an AVD built from `system-images;android-35;google_apis_playstore;x86_64` with a test-user Google account added.
+- **Account not linked to Google Health (verified 2026-11-12):** for a Google account that has never set up the Fitbit or Google Health app, `users/me/identity` returns `400 FAILED_PRECONDITION` "The account is not linked to Google Health." The callback reports this as `not_linked` and the app asks the user to set up the app first. A real connection needs a tester whose account has a Google Health profile.
+- **Callback logs:** `health-oauth-callback` logs the failure reason and, for Health API errors, Google's status and message (never tokens). Read them with `supabase logs --remote=ftgozpdlwcoiwynqcslh --search "health-oauth" --since 1h`.
 - **iOS:** `ios/Runner/Info.plist` still needs the reversed iOS client ID as a URL scheme for Google sign-in. iOS has not been built (needs a Mac).
 - **Google Health wire shapes:** 11 assumptions marked `UNVERIFIED` in `supabase/functions/_shared/google.ts` and `mapping.ts`. Fixtures are synthetic. Check them against a real account first.
 - **First sync takes several runs:** the 35-day backfill is 324 jobs; one `sync-worker` call handles at most 200 jobs or about 40 seconds.
 - **Scheduled sync:** calling `sync-worker` with an `sb_secret_` key in the `Authorization` header is rejected by the gateway ("Conflicting API keys"). Solve this when adding the cron job.
 
 ## Demo data without a device
-`seed_demo_metrics(p_user_id, p_days)` is a service-role-only RPC that inserts rows flagged `is_demo`. It refuses if the user has real rows. The app shows a "Demo data" chip for such rows.
+`seed_demo_metrics(p_user_id, p_days)` is a service-role-only RPC that inserts rows flagged `is_demo`. It refuses if the user has real rows. The app shows a "Demo data" chip for such rows. Demo rows appear on Today even before Google Health is connected (only after health-data consent), with a "Sample data, not from your device" note.
 
 ## Still to do elsewhere
 - `ANTHROPIC_API_KEY`: create a key in the Anthropic console with a spending limit. It is stored only as a Supabase secret and in `.env`, never in the app.

@@ -64,10 +64,11 @@ final todayDataProvider = FutureProvider<TodayData>((ref) async {
     return TodayData(today: today);
   }
   final repository = ref.watch(healthRepositoryProvider);
+  final profile = await ref.watch(profileProvider.future);
+  if (profile?.hasHealthConsent != true) return TodayData(today: today);
   final connection = await ref.watch(connectionProvider.future);
-  if (connection?.isActive != true) {
-    return TodayData(today: today, connection: connection);
-  }
+  // With consent, fetch even when not connected: demo rows may exist before
+  // a device does.
   final rows = await repository.fetchDailyMetrics(userId, today);
   return TodayData(today: today, connection: connection, rows: rows);
 });

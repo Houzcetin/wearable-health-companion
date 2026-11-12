@@ -63,6 +63,25 @@ Deno.test("Google Health uses the documented identity and nested daily rollup re
   assertEquals(await client.getIdentity(), "health-user-1");
   await client.dailyRollUp("steps", "2026-11-11");
   assertEquals(calls[0].url, "https://health.googleapis.com/v4/users/me/identity");
+  const unlinked = new GoogleHealthClient("test-access", async () =>
+    Response.json(
+      {
+        error: {
+          code: 400,
+          status: "FAILED_PRECONDITION",
+          message: "The account is not linked to Google Health.",
+        },
+      },
+      { status: 400 },
+    ));
+  try {
+    await unlinked.getIdentity();
+    throw new Error("Expected not linked");
+  } catch (error) {
+    assert(error instanceof GoogleError);
+    assertEquals(error.code, "google_not_linked");
+    assertEquals(error.transient, false);
+  }
   assertEquals(
     calls[1].url,
     "https://health.googleapis.com/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp",

@@ -8,9 +8,18 @@ type Failure =
   | "no_refresh_token"
   | "exchange_failed"
   | "identity_failed"
+  | "not_linked"
   | "store_failed";
 
-function redirect(reason?: Failure): Response {
+function errorCode(error: unknown): string {
+  return error instanceof Error ? (error as { code?: string }).code ?? error.name : "unknown";
+}
+
+function redirect(reason?: Failure, detail?: string): Response {
+  // Reason codes only; never tokens or provider bodies.
+  if (reason) {
+    console.warn(`health-oauth-callback failed: ${reason}${detail ? ` (${detail})` : ""}`);
+  }
   const url = new URL("wearablecompanion://connected");
   url.searchParams.set("status", reason ? "error" : "ok");
   if (reason) url.searchParams.set("reason", reason);
@@ -42,15 +51,16 @@ export async function handler(req: Request): Promise<Response> {
         requireEnv("SUPABASE_URL").replace(/\/$/, "")
       }/functions/v1/health-oauth-callback`,
     });
-  } catch {
-    return redirect("exchange_failed");
+  } catch (error) {
+    return redirect("exchange_failed", errorCode(error));
   }
   if (!tokens.refreshToken) return redirect("no_refresh_token");
   let healthUserId: string;
   try {
     healthUserId = await new GoogleHealthClient(tokens.accessToken).getIdentity();
-  } catch {
-    return redirect("identity_failed");
+  } catch (error) {
+    const code = errorCode(error);
+    return redirect(code === "google_not_linked" ? "not_linked" : "identity_failed", code);
   }
   try {
     const client = createServiceClient();
@@ -60,11 +70,11 @@ export async function handler(req: Request): Promise<Response> {
       p_refresh_token: tokens.refreshToken,
       p_scopes: tokens.scopes,
     });
-    if (error) return redirect("store_failed");
+    if (error) return redirect("store_failed", error.code);
     const queued = await client.rpc("enqueue_backfill", { p_user_id: userId, p_days: 35 });
-    if (queued.error) return redirect("store_failed");
+    if (queued.error) return redirect("store_failed", queued.error.code);
     return redirect();
-  } catch {
-    return redirect("store_failed");
+  } catch (error) {
+    return redirect("store_failed", errorCode(error));
   }
 }

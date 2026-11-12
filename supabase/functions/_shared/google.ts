@@ -50,6 +50,20 @@ async function requestJson(
     if (!response.ok) {
       // Keep provider bodies, which can contain credentials, out of errors and logs.
       if (body.error === "invalid_grant") throw new GoogleError("invalid_grant", false);
+      if (new URL(url).hostname === "health.googleapis.com") {
+        // Health API errors carry a status and a human message, never credentials.
+        const detail = record(body.error);
+        console.warn(
+          `google health ${response.status} ${String(detail.status ?? "")}: ${
+            String(detail.message ?? "").slice(0, 300)
+          }`,
+        );
+        // Verified 2026-11-12: an account without a Google Health profile gets
+        // 400 FAILED_PRECONDITION "The account is not linked to Google Health."
+        if (response.status === 400 && detail.status === "FAILED_PRECONDITION") {
+          throw new GoogleError("google_not_linked", false);
+        }
+      }
       throw new GoogleError(
         `google_http_${response.status}`,
         [408, 425, 429].includes(response.status) || response.status >= 500,
@@ -160,7 +174,8 @@ export class GoogleHealthClient {
   }
 
   async getIdentity(): Promise<string> {
-    // UNVERIFIED: confirm users/me/identity returns healthUserId for a connected real account.
+    // UNVERIFIED: confirm users/me/identity returns healthUserId for a linked real account.
+    // An unlinked account fails with google_not_linked (verified on a real account).
     const body = await this.request("users/me/identity");
     if (typeof body.healthUserId !== "string" || !/^[A-Za-z0-9-]{1,63}$/.test(body.healthUserId)) {
       throw new GoogleError("google_identity_response", false);

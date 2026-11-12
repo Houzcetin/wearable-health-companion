@@ -138,6 +138,9 @@ void validateHealthCallback(String callback) {
       'Google did not grant ongoing access. Please reconnect and allow access.',
     'exchange_failed' =>
       'Could not complete Google authorization. Please try again.',
+    'not_linked' =>
+      'This Google account has no Google Health profile yet. Set up the '
+          'Fitbit or Google Health app with this account, then connect again.',
     'identity_failed' =>
       'Could not identify your Google Health account. Please try again.',
     'store_failed' => 'Could not save your connection. Please try again.',

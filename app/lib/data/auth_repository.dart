@@ -102,8 +102,10 @@ class SupabaseAuthRepository implements AuthRepository {
           'Sign-in was cancelled. You can try again when ready.',
         );
       }
+      debugPrint('Google sign-in failed: ${error.code}');
       throw const UserFacingException(
-        'Google sign-in failed. Check your connection and try again.',
+        'Google sign-in failed. Make sure a Google account is added on this '
+        'device and Google Play services is up to date, then try again.',
       );
     } on AuthException catch (error) {
       if (error.message.toLowerCase().contains('nonce')) {

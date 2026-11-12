@@ -176,7 +176,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
 
   List<Widget> _content(TodayData data) {
     final connection = data.connection;
-    if (connection?.isActive != true) {
+    final connected = connection?.isActive == true;
+    // Demo rows stand in for a device during development; show them even
+    // before Google Health is connected, clearly labelled.
+    if (!connected && !data.rows.any((row) => row.isDemo)) {
       final revoked = connection?.status == ConnectionStatus.revoked;
       final error = connection?.status == ConnectionStatus.error;
       return [
@@ -281,27 +284,38 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
         delta: summary.steps.delta,
       ),
       const SizedBox(height: 4),
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              _lastSynced(connection!.lastSyncedAt),
-              style: Theme.of(context).textTheme.bodySmall,
+      if (!connected)
+        Row(
+          children: [
+            const Expanded(child: Text('Sample data, not from your device.')),
+            TextButton(
+              onPressed: () => context.go('/connect'),
+              child: const Text('Connect Google Health'),
             ),
-          ),
-          TextButton.icon(
-            onPressed: _syncing ? null : _sync,
-            icon: _syncing
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.sync),
-            label: Text(_syncing ? 'Syncing…' : 'Sync now'),
-          ),
-        ],
-      ),
+          ],
+        )
+      else
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _lastSynced(connection!.lastSyncedAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _syncing ? null : _sync,
+              icon: _syncing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync),
+              label: Text(_syncing ? 'Syncing…' : 'Sync now'),
+            ),
+          ],
+        ),
       if (_syncMessage != null)
         Semantics(
           liveRegion: true,
@@ -321,6 +335,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
 String _number(num value) => value == value.roundToDouble()
     ? value.toInt().toString()
     : value.toStringAsFixed(1);
+
+/// Differences from a median can be x.5; show whole units, grouped.
+String _delta(num value) =>
+    NumberFormat.decimalPattern('en').format(value.abs().round());
 String _duration(int minutes) =>
     '${minutes ~/ 60} h ${(minutes % 60).toString().padLeft(2, '0')} min';
 String _sleepInsight(MetricComparison sleep) => switch (sleep.status) {
@@ -329,7 +347,7 @@ String _sleepInsight(MetricComparison sleep) => switch (sleep.status) {
     'Still learning your usual (${sleep.sampleDays} of 7 nights).',
   UsualStatus.steady => 'Your sleep matched your usual.',
   UsualStatus.changed =>
-    'You slept ${_number(sleep.delta!.abs())} min ${sleep.delta! < 0 ? 'less' : 'more'} than your usual.',
+    'You slept ${_delta(sleep.delta!)} min ${sleep.delta! < 0 ? 'less' : 'more'} than your usual.',
 };
 String _comparison(
   MetricComparison metric,
@@ -339,9 +357,9 @@ String _comparison(
   UsualStatus.learning =>
     'Learning your usual (${metric.sampleDays} of 7 days)',
   UsualStatus.changed || UsualStatus.steady =>
-    metric.delta == 0
+    metric.delta!.abs().round() == 0
         ? 'Same as your usual'
-        : '${_number(metric.delta!.abs())} $unit ${metric.delta! < 0 ? 'below' : 'above'} usual',
+        : '${_delta(metric.delta!)} $unit ${metric.delta! < 0 ? 'below' : 'above'} usual',
 };
 String _lastSynced(DateTime? timestamp) => timestamp == null
     ? 'Last synced: never'
