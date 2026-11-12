@@ -16,8 +16,13 @@ export async function handler(req: Request): Promise<Response> {
   const early = preflightOrMethod(req);
   if (early) return early;
   try {
-    const token = bearerToken(req);
-    if (!sameSecret(token, requireEnv("SUPABASE_SERVICE_ROLE_KEY"))) await requireUserId(req);
+    const cronSecret = Deno.env.get("SYNC_CRON_SECRET");
+    const isCron = !!cronSecret?.trim() &&
+      sameSecret(req.headers.get("x-cron-secret") ?? "", cronSecret);
+    if (!isCron) {
+      const token = bearerToken(req);
+      if (!sameSecret(token, requireEnv("SUPABASE_SERVICE_ROLE_KEY"))) await requireUserId(req);
+    }
     const client = createServiceClient();
     const store = createQueueStore(client);
     const config = {

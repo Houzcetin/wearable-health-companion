@@ -17,6 +17,13 @@ try {
   await import("./worker_test.ts");
   await import("./queue_test.ts");
   await import("./routes_test.ts");
+  await import("./webhook_signature_test.ts");
+  await import("./coach_tools_test.ts");
+  await import("../sync-worker/handler_test.ts");
+  await import("../health-webhook/handler_test.ts");
+  await import("../coach/coach_test.ts");
+  await import("../export-data/handler_test.ts");
+  await import("../delete-account/handler_test.ts");
 } finally {
   Object.defineProperty(Deno, "test", { value: originalTest });
 }

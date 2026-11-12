@@ -445,5 +445,17 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.sync-worker]
-# The handler verifies user JWTs or the exact service role key itself.
+# The handler verifies user JWTs, the exact service role key, or the cron secret itself.
+verify_jwt = false
+
+[functions.health-webhook]
+verify_jwt = false
+
+[functions.coach]
+verify_jwt = false
+
+[functions.export-data]
+verify_jwt = false
+
+[functions.delete-account]
 verify_jwt = false
