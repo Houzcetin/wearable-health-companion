@@ -128,7 +128,7 @@ class SupabaseHealthRepository implements HealthRepository {
         .eq('user_id', userId)
         .gte('date', dateKey(civilDate(start)))
         .lte('date', dateKey(civilDate(end)))
-        .order('date');
+        .order('date', ascending: true);
     return rows.map(DailyMetrics.fromJson).toList();
   }
 

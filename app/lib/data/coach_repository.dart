@@ -138,7 +138,8 @@ class SupabaseCoachRepository implements CoachRepository {
       if (latest == null) return [];
       final rows = await _client.from('coach_messages').select(columns)
           .eq('user_id', userId).eq('thread_id', latest['thread_id'] as String)
-          .order('created_at');
+          // postgrest-dart sorts descending unless told otherwise.
+          .order('created_at', ascending: true);
       return rows.map(CoachMessage.fromJson).toList();
     } catch (error) {
       throw mapCoachError(error);
