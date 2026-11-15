@@ -11,8 +11,12 @@ void main() {
     expect(find.text('Sleep'), findsOneWidget);
     expect(find.text('Backend not configured'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.emoji_events_outlined));
+    // Play is hidden until it has content; four tabs remain.
+    expect(find.byIcon(Icons.emoji_events_outlined), findsNothing);
+    expect(find.byType(NavigationDestination), findsNWidgets(4));
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
-    expect(find.textContaining('streaks'), findsOneWidget);
+    expect(find.text('Export my data'), findsOneWidget);
   });
 }
