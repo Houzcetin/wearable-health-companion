@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../data/auth_repository.dart';
 import '../../data/health_repository.dart';
 import '../../data/providers.dart';
+import '../workouts/ui/workout_settings_section.dart';
 import 'export_file.dart';
 import 'widgets/delete_data_dialog.dart';
 
@@ -170,6 +171,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             enabled: canAct,
             onTap: canAct ? () => _delete(account: true) : null,
           ),
+          const WorkoutSettingsSection(),
         ],
       ),
     );

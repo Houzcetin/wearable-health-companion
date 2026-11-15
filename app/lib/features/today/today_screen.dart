@@ -9,6 +9,7 @@ import '../../core/theme.dart';
 import '../../data/daily_metrics.dart';
 import '../../data/health_repository.dart';
 import '../../data/providers.dart';
+import '../workouts/ui/workout_today_card.dart';
 import 'domain/usual.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
@@ -135,6 +136,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
                 ),
               ),
             ),
+            const WorkoutTodayCard(),
           ],
         ),
       ),
