@@ -172,4 +172,24 @@ void main() {
     expect(learning.restingHeartRate.status, UsualStatus.learning);
     expect(learning.steps.status, UsualStatus.learning);
   });
+  test('usual range is the 25th to 75th percentile of history', () {
+    final sleep = calculateUsual(
+      rows([420, 430, 440, 450, 460, 470, 480, 490]),
+      today,
+    ).sleep;
+    expect(sleep.low, closeTo(437.5, 1e-9));
+    expect(sleep.high, closeTo(472.5, 1e-9));
+    expect(sleep.low! <= sleep.usual! && sleep.usual! <= sleep.high!, isTrue);
+  });
+  test('usual range is null while learning', () {
+    final sleep = calculateUsual(rows([420, 430, 440]), today).sleep;
+    expect(sleep.status, UsualStatus.learning);
+    expect(sleep.low, isNull);
+    expect(sleep.high, isNull);
+  });
+  test('percentile interpolates between neighbours', () {
+    expect(percentile([1, 2, 3, 4], 0.5), 2.5);
+    expect(percentile([1, 2, 3, 4, 5], 0.25), 2);
+    expect(percentile([7], 0.75), 7);
+  });
 }

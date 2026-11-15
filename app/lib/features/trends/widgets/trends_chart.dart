@@ -23,11 +23,17 @@ class _TrendsChartState extends State<TrendsChart> {
     final data = widget.data;
     final days = data.days;
     final metric = data.metric;
-    final color = switch (metric) {
-      TrendMetric.sleep => AppColors.sleep,
-      TrendMetric.heart => AppColors.heart,
-      TrendMetric.steps => AppColors.activity,
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final palette = MetricColors.of(context);
+    final (color, tint) = switch (metric) {
+      TrendMetric.sleep => (palette.sleep, palette.sleepTint),
+      TrendMetric.heart => (palette.heart, palette.heartTint),
+      TrendMetric.steps => (palette.activity, palette.activityTint),
     };
+    // With a usual range, days inside it are muted so the off days stand out.
+    final hasRange = data.usualLow != null && data.usualHigh != null;
+    final muted = Color.alphaBlend(color.withValues(alpha: 0.32), scheme.surfaceContainerLowest);
     final usual = data.usual;
     final maxValue = [
       1.0,
@@ -40,22 +46,32 @@ class _TrendsChartState extends State<TrendsChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('${DateFormat('MMM d', 'en_US').format(data.start)} – '
-          '${DateFormat('MMM d', 'en_US').format(data.end)} · ${metric.unit}'),
-        const SizedBox(height: 8),
         Semantics(
           key: const Key('trends-chart-semantics'),
           label: [data.summary, ...days.map(dayLabel)].join(' '),
           child: ExcludeSemantics(
             child: SizedBox(
-              height: 260,
+              height: 220,
               child: BarChart(
                 BarChartData(
                   minY: 0,
                   maxY: maxValue * 1.2,
                   alignment: BarChartAlignment.spaceAround,
                   borderData: FlBorderData(show: false),
-                  gridData: const FlGridData(drawVerticalLine: false),
+                  gridData: FlGridData(
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (_) => FlLine(
+                      color: scheme.outlineVariant, strokeWidth: 1,
+                    ),
+                  ),
+                  rangeAnnotations: RangeAnnotations(horizontalRangeAnnotations: [
+                    if (hasRange)
+                      HorizontalRangeAnnotation(
+                        y1: metric.chartValue(data.usualLow!),
+                        y2: metric.chartValue(data.usualHigh!),
+                        color: tint,
+                      ),
+                  ]),
                   barGroups: [
                     for (var i = 0; i < days.length; i++)
                       BarChartGroupData(
@@ -65,9 +81,11 @@ class _TrendsChartState extends State<TrendsChart> {
                           if (days[i].value != null)
                             BarChartRodData(
                               toY: metric.chartValue(days[i].value!),
-                              color: color,
-                              width: data.range == TrendRange.week ? 20 : 6,
-                              borderRadius: BorderRadius.circular(3),
+                              color: !hasRange || data.isOutsideUsual(days[i].value!)
+                                  ? color : muted,
+                              width: data.range == TrendRange.week ? 22 : 6,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(6), bottom: Radius.circular(2)),
                             ),
                         ],
                       ),
@@ -76,8 +94,8 @@ class _TrendsChartState extends State<TrendsChart> {
                     if (usual != null)
                       HorizontalLine(
                         y: metric.chartValue(usual),
-                        color: color,
-                        strokeWidth: 2,
+                        color: scheme.onSurfaceVariant,
+                        strokeWidth: 1.5,
                         dashArray: [6, 4],
                       ),
                   ]),
@@ -95,7 +113,8 @@ class _TrendsChartState extends State<TrendsChart> {
                             ? const SizedBox.shrink()
                             : Text(
                                 NumberFormat.compact(locale: 'en').format(value),
-                                style: Theme.of(context).textTheme.labelSmall,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant),
                               ),
                       ),
                     ),
@@ -113,13 +132,15 @@ class _TrendsChartState extends State<TrendsChart> {
                               Tooltip(
                                 key: ValueKey('missing-${dateKey(day.date)}'),
                                 message: 'no data',
-                                child: const Icon(Icons.remove, size: 10),
+                                child: Icon(Icons.remove, size: 10,
+                                  color: scheme.onSurfaceVariant),
                               )
                             else
                               const SizedBox(height: 10),
                             if (labelDate)
                               Text('${day.date.day}',
-                                style: Theme.of(context).textTheme.labelSmall),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant)),
                           ]);
                         },
                       ),
@@ -135,9 +156,10 @@ class _TrendsChartState extends State<TrendsChart> {
                     touchTooltipData: BarTouchTooltipData(
                       fitInsideHorizontally: true,
                       fitInsideVertically: true,
+                      getTooltipColor: (_) => scheme.inverseSurface,
                       getTooltipItem: (group, _, _, _) => BarTooltipItem(
                         dayLabel(days[group.x]),
-                        const TextStyle(color: Colors.white),
+                        TextStyle(color: scheme.onInverseSurface),
                       ),
                     ),
                   ),
@@ -147,14 +169,69 @@ class _TrendsChartState extends State<TrendsChart> {
             ),
           ),
         ),
-        if (data.missingDays > 0)
-          const Text('− no data', style: TextStyle(fontSize: 12)),
-        if (usual != null)
-          Text('Dashed line: your usual, ${metric.valueLabel(usual)}'),
-        if (_selected != null)
+        const SizedBox(height: 12),
+        DefaultTextStyle.merge(
+          style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              if (hasRange)
+                _LegendItem(
+                  swatch: Container(width: 14, height: 10, decoration: BoxDecoration(
+                    color: tint, borderRadius: BorderRadius.circular(3))),
+                  label: 'Usual range',
+                ),
+              if (usual != null)
+                _LegendItem(
+                  swatch: SizedBox(width: 16, child: CustomPaint(
+                    size: const Size(16, 1),
+                    painter: _DashPainter(scheme.onSurfaceVariant))),
+                  label: 'Usual ${metric.valueLabel(usual)}',
+                ),
+              if (hasRange)
+                _LegendItem(
+                  swatch: Container(width: 10, height: 10, decoration: BoxDecoration(
+                    color: color, borderRadius: BorderRadius.circular(3))),
+                  label: 'Outside usual',
+                ),
+              if (data.missingDays > 0)
+                const _LegendItem(swatch: Text('−'), label: 'No data'),
+            ],
+          ),
+        ),
+        if (_selected != null) ...[
+          const SizedBox(height: 8),
           Semantics(liveRegion: true, child: Text(_selected!,
-            key: const Key('selected-trend-day'))),
+            key: const Key('selected-trend-day'),
+            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600))),
+        ],
       ],
     );
   }
+}
+
+class _LegendItem extends StatelessWidget {
+  const _LegendItem({required this.swatch, required this.label});
+  final Widget swatch;
+  final String label;
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [swatch, const SizedBox(width: 6), Text(label)],
+  );
+}
+
+class _DashPainter extends CustomPainter {
+  const _DashPainter(this.color);
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color..strokeWidth = 1.5;
+    for (var x = 0.0; x < size.width; x += 7) {
+      canvas.drawLine(Offset(x, 0), Offset(math.min(x + 4, size.width), 0), paint);
+    }
+  }
+  @override
+  bool shouldRepaint(_DashPainter old) => old.color != color;
 }

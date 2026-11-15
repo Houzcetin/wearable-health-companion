@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme.dart';
+
 class NumbersUsed extends StatelessWidget {
   const NumbersUsed({super.key, required this.facts});
   final Map<String, dynamic> facts;
@@ -8,20 +10,41 @@ class NumbersUsed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tools = facts['tools'];
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: const Text('Numbers used'),
-      children: [
-        if (tools is! List || tools.isEmpty)
-          const Text('No numbers were returned.')
-        else
-          for (final tool in tools)
-            if (tool is Map)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _ToolFacts(tool: tool),
-              ),
-      ],
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadius.inset),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpace.m),
+        childrenPadding: const EdgeInsets.fromLTRB(
+          AppSpace.m,
+          0,
+          AppSpace.m,
+          AppSpace.m,
+        ),
+        dense: true,
+        leading: Icon(
+          Icons.bar_chart,
+          size: 18,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        title: Text('Numbers used', style: theme.textTheme.labelLarge),
+        expandedAlignment: Alignment.centerLeft,
+        children: [
+          if (tools is! List || tools.isEmpty)
+            const Text('No numbers were returned.')
+          else
+            for (final tool in tools)
+              if (tool is Map)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _ToolFacts(tool: tool),
+                ),
+        ],
+      ),
     );
   }
 }
@@ -40,12 +63,21 @@ class _ToolFacts extends StatelessWidget {
       final metric = input['metric'] as String? ?? '';
       final a = _map(result['a'] ?? result['period_a']);
       final b = _map(result['b'] ?? result['period_b']);
-      children.add(Text(_metricName(metric),
-        style: Theme.of(context).textTheme.titleSmall));
+      children.add(
+        Text(
+          _metricName(metric),
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+      );
+      children.add(const SizedBox(height: 2));
       for (final period in [('A', 'a', a), ('B', 'b', b)]) {
         final (label, key, values) = period;
-        children.add(Text('Period $label: ${input['${key}_start'] ?? '—'} – '
-          '${input['${key}_end'] ?? '—'}'));
+        children.add(
+          Text(
+            'Period $label: ${input['${key}_start'] ?? '—'} – '
+            '${input['${key}_end'] ?? '—'}',
+          ),
+        );
         children.add(Text('Mean: ${_value(values['mean'], metric)}'));
         final missing = values['missing_dates'];
         final count = missing is List ? missing.length : values['missing_days'];
@@ -56,28 +88,59 @@ class _ToolFacts extends StatelessWidget {
       }
       final contributors = result['top_contributors'];
       if (contributors is List && contributors.isNotEmpty) {
-        children.add(const Text('Top contributor dates'));
+        children.add(
+          Text(
+            'Top contributor dates',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+        );
         for (final contributor in contributors) {
           if (contributor is Map) {
-            children.add(Text('${contributor['date'] ?? '—'}: '
-              '${_value(contributor['value'], metric)}'));
+            children.add(
+              Text(
+                '${contributor['date'] ?? '—'}: '
+                '${_value(contributor['value'], metric)}',
+              ),
+            );
           }
         }
       }
     } else if (name == 'get_daily_metrics') {
-      children.add(Text('Daily summaries: ${input['start_date'] ?? '—'} – '
-        '${input['end_date'] ?? '—'}'));
+      children.add(
+        Text(
+          'Daily summaries: ${input['start_date'] ?? '—'} – '
+          '${input['end_date'] ?? '—'}',
+        ),
+      );
       final days = result['days'];
-      children.add(Text(days is List
-          ? '${days.length} ${days.length == 1 ? 'day' : 'days'} with data'
-          : 'No daily summaries were returned.'));
+      children.add(
+        Text(
+          days is List
+              ? '${days.length} ${days.length == 1 ? 'day' : 'days'} with data'
+              : 'No daily summaries were returned.',
+        ),
+      );
     } else {
-      children.add(const Text('No readable numbers were returned for this tool.'));
+      children.add(
+        const Text('No readable numbers were returned for this tool.'),
+      );
     }
+    final theme = Theme.of(context);
     return Align(
       alignment: Alignment.centerLeft,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-        children: children),
+      child: DefaultTextStyle.merge(
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          height: 1.5,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ),
     );
   }
 }

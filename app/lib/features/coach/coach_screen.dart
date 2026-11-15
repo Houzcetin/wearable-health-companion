@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/theme.dart';
 import '../../data/auth_repository.dart';
 import '../../data/coach_repository.dart';
 import '../../data/providers.dart';
@@ -104,7 +105,8 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
       appBar: AppBar(
         title: const Text('Coach'),
         actions: [
-          TextButton(
+          TextButton.icon(
+            icon: const Icon(Icons.add, size: 18),
             onPressed: thread.isLoading || thread.value?.sending == true ||
                 profile.value?.coachConsentAt == null
                 ? null : () {
@@ -112,8 +114,9 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                   _input.clear();
                   setState(() {});
                 },
-            child: const Text('New chat'),
+            label: const Text('New chat'),
           ),
+          const SizedBox(width: AppSpace.s),
         ],
       ),
       body: !ref.watch(backendConfiguredProvider)
@@ -128,7 +131,7 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                 if (value?.coachConsentAt == null ||
                     thread.value?.error?.code == 'consent_required') {
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
+                    padding: AppSpace.page,
                     child: CoachConsentCard(
                       busy: _granting, error: _consentError, onAllow: _allow,
                       onNotNow: () => context.go('/today'),
@@ -148,10 +151,14 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
   }
 
   Widget _loadError(String message, VoidCallback retry) => Center(
-    child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Text(message),
-      OutlinedButton(onPressed: retry, child: const Text('Retry')),
-    ]),
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpace.xxl),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(message, textAlign: TextAlign.center),
+        const SizedBox(height: AppSpace.m),
+        OutlinedButton(onPressed: retry, child: const Text('Retry')),
+      ]),
+    ),
   );
 
   Widget _chat(CoachThread thread) => SafeArea(
@@ -159,11 +166,11 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
       children: [
         Expanded(
           child: ListView(
-            controller: _scroll, padding: const EdgeInsets.all(16),
+            controller: _scroll, padding: AppSpace.page,
             children: [
               if (thread.messages.isEmpty) ...[
-                const Text('Ask about your sleep, heart rate or activity.'),
-                const SizedBox(height: 12),
+                const _CoachIntro(),
+                const SizedBox(height: AppSpace.l),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   for (final question in suggestedQuestions)
                     ActionChip(
@@ -176,12 +183,16 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
               if (thread.sending)
                 Semantics(
                   liveRegion: true, label: 'Coach is typing',
-                  child: const Row(children: [
-                    SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                    SizedBox(width: 8),
-                    Text('Thinking…'),
-                  ]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpace.s),
+                    child: Row(children: [
+                      const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                      const SizedBox(width: AppSpace.s),
+                      Text('Thinking…', style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ]),
+                  ),
                 ),
               if (thread.error != null)
                 Semantics(
@@ -190,12 +201,14 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                     children: [
                       Text(thread.error!.message,
                         style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                      if (thread.error!.code != 'daily_limit')
+                      if (thread.error!.code != 'daily_limit') ...[
+                        const SizedBox(height: AppSpace.s),
                         OutlinedButton(
                           onPressed: thread.sending ? null :
                             () => ref.read(coachThreadProvider.notifier).retry(),
                           child: const Text('Retry'),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -203,30 +216,59 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          padding: const EdgeInsets.fromLTRB(AppSpace.l, AppSpace.s, AppSpace.l, AppSpace.xs),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Expanded(child: TextField(
               key: const Key('coach-input'),
               controller: _input,
               maxLength: 500, maxLines: 3, minLines: 1,
               inputFormatters: [LengthLimitingTextInputFormatter(500)],
-              decoration: const InputDecoration(labelText: 'Ask the coach'),
+              decoration: const InputDecoration(
+                labelText: 'Ask the coach',
+                floatingLabelBehavior: FloatingLabelBehavior.never,
+              ),
+              // The 500-character limit only matters near the end.
+              buildCounter: (context, {required currentLength, required isFocused,
+                  required maxLength}) => currentLength > 400
+                  ? Text('$currentLength/$maxLength') : null,
               onChanged: (_) => setState(() {}),
               onSubmitted: thread.sending ? null : (_) => _send(),
             )),
-            IconButton(
-              key: const Key('coach-send'), tooltip: 'Send',
-              onPressed: thread.sending || _input.text.trim().isEmpty ||
-                  _input.text.trim().length > 500 ? null : _send,
-              icon: const Icon(Icons.send),
+            const SizedBox(width: AppSpace.s),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: IconButton.filled(
+                key: const Key('coach-send'), tooltip: 'Send',
+                onPressed: thread.sending || _input.text.trim().isEmpty ||
+                    _input.text.trim().length > 500 ? null : _send,
+                icon: const Icon(Icons.arrow_upward),
+              ),
             ),
           ]),
         ),
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
-          child: Text('Not medical advice.'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpace.s),
+          child: Text('Not medical advice.', style: Theme.of(context)
+            .textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ),
       ],
     ),
   );
+}
+
+class _CoachIntro extends StatelessWidget {
+  const _CoachIntro();
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: AppSpace.s),
+      Text('What would you like to know?', style: theme.textTheme.headlineSmall),
+      const SizedBox(height: AppSpace.s),
+      Text('Ask about your sleep, heart rate or activity.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant)),
+    ]);
+  }
 }

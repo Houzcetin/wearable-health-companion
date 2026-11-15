@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../data/providers.dart';
 import '../features/auth/auth_screens.dart';
 import '../features/coach/coach_screen.dart';
-import '../features/play/play_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/today/today_screen.dart';
 import '../features/trends/trends_screen.dart';
@@ -89,7 +88,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               launchId: state.extra,
             ),
           )]),
-          _branch('/play', const PlayScreen()),
           _branch('/settings', const SettingsScreen()),
         ],
       ),
@@ -112,33 +110,41 @@ class _Shell extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
     body: shell,
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: shell.currentIndex,
-      onDestinationSelected: (i) =>
-          shell.goBranch(i, initialLocation: i == shell.currentIndex),
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.wb_sunny_outlined),
-          selectedIcon: Icon(Icons.wb_sunny),
-          label: 'Today',
+    // Play (points, streaks, challenges) stays out of the bar until it has
+    // real content; an empty tab only costs a tap.
+    bottomNavigationBar: DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
         ),
-        NavigationDestination(icon: Icon(Icons.show_chart), label: 'Trends'),
-        NavigationDestination(
-          icon: Icon(Icons.chat_bubble_outline),
-          selectedIcon: Icon(Icons.chat_bubble),
-          label: 'Coach',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.emoji_events_outlined),
-          selectedIcon: Icon(Icons.emoji_events),
-          label: 'Play',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: 'Settings',
-        ),
-      ],
+      ),
+      child: NavigationBar(
+        selectedIndex: shell.currentIndex,
+        onDestinationSelected: (i) =>
+            shell.goBranch(i, initialLocation: i == shell.currentIndex),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.wb_sunny_outlined),
+            selectedIcon: Icon(Icons.wb_sunny),
+            label: 'Today',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.show_chart),
+            selectedIcon: Icon(Icons.insights),
+            label: 'Trends',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline),
+            selectedIcon: Icon(Icons.chat_bubble),
+            label: 'Coach',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
+        ],
+      ),
     ),
   );
 }

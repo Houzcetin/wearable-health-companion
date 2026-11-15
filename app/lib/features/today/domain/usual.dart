@@ -9,8 +9,14 @@ class MetricComparison {
     required this.delta,
     required this.status,
     required this.sampleDays,
+    this.low,
+    this.high,
   });
   final double? today, usual, delta;
+
+  /// The middle half of the previous 28 days (25th to 75th percentile).
+  /// Null while the usual is still being learned.
+  final double? low, high;
   final UsualStatus status;
   final int sampleDays;
 }
@@ -22,6 +28,15 @@ class UsualSummary {
     required this.steps,
   });
   final MetricComparison sleep, restingHeartRate, steps;
+}
+
+/// Linear-interpolated percentile of [sorted] values, `0 <= p <= 1`.
+/// At p = 0.5 this is the usual median (middle pair averaged when even).
+double percentile(List<double> sorted, double p) {
+  final position = (sorted.length - 1) * p;
+  final lower = position.floor();
+  final upper = position.ceil();
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
 }
 
 /// Median over the previous 28 civil dates, excluding today and missing values.
@@ -44,19 +59,15 @@ UsualSummary calculateUsual(List<DailyMetrics> rows, DateTime today) {
         history.map(read).whereType<num>().map((v) => v.toDouble()).toList()
           ..sort();
     final enough = values.length >= 7;
-    double? median;
-    if (enough) {
-      final middle = values.length ~/ 2;
-      median = values.length.isOdd
-          ? values[middle]
-          : (values[middle - 1] + values[middle]) / 2;
-    }
+    final median = enough ? percentile(values, 0.5) : null;
     final delta = value != null && median != null ? value - median : null;
     return MetricComparison(
       today: value?.toDouble(),
       usual: median,
       delta: delta,
       sampleDays: values.length,
+      low: enough ? percentile(values, 0.25) : null,
+      high: enough ? percentile(values, 0.75) : null,
       status: value == null
           ? UsualStatus.noData
           : !enough

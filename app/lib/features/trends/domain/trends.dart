@@ -83,7 +83,29 @@ class TrendsData {
     final values = days.map((day) => day.value).whereType<double>().toList();
     return values.isEmpty ? null : values.reduce((a, b) => a + b) / values.length;
   }
-  double? get usual => metric.comparison(calculateUsual(rows, end)).usual;
+  MetricComparison get _baseline => metric.comparison(calculateUsual(rows, end));
+  double? get usual => _baseline.usual;
+
+  /// Usual range (25th–75th percentile of the 28 days before [end]).
+  double? get usualLow => _baseline.low;
+  double? get usualHigh => _baseline.high;
+
+  /// True when [value] falls outside the usual range.
+  bool isOutsideUsual(double value) {
+    final low = usualLow, high = usualHigh;
+    return low != null && high != null && (value < low || value > high);
+  }
+
+  /// Days outside the usual range, largest difference first.
+  List<TrendDay> get outsideUsual {
+    final baseline = usual;
+    if (baseline == null) return const [];
+    return days
+        .where((day) => day.value != null && isOutsideUsual(day.value!))
+        .toList()
+      ..sort((a, b) =>
+          (b.value! - baseline).abs().compareTo((a.value! - baseline).abs()));
+  }
   bool get learning => range.days - missingDays < 7 || usual == null;
   bool get isDemo => rows.any((row) => row.isDemo);
   String get summary {
