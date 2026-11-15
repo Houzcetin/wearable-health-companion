@@ -34,6 +34,7 @@ class _TrendsChartState extends State<TrendsChart> {
     // With a usual range, days inside it are muted so the off days stand out.
     final hasRange = data.usualLow != null && data.usualHigh != null;
     final muted = Color.alphaBlend(color.withValues(alpha: 0.32), scheme.surfaceContainerLowest);
+    final band = color.withValues(alpha: 0.12);
     final usual = data.usual;
     final maxValue = [
       1.0,
@@ -69,7 +70,7 @@ class _TrendsChartState extends State<TrendsChart> {
                       HorizontalRangeAnnotation(
                         y1: metric.chartValue(data.usualLow!),
                         y2: metric.chartValue(data.usualHigh!),
-                        color: tint,
+                        color: band,
                       ),
                   ]),
                   barGroups: [
@@ -179,7 +180,8 @@ class _TrendsChartState extends State<TrendsChart> {
               if (hasRange)
                 _LegendItem(
                   swatch: Container(width: 14, height: 10, decoration: BoxDecoration(
-                    color: tint, borderRadius: BorderRadius.circular(3))),
+                    color: band, borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: color.withValues(alpha: 0.3)))),
                   label: 'Usual range',
                 ),
               if (usual != null)

@@ -86,7 +86,7 @@ class TrendsData {
   MetricComparison get _baseline => metric.comparison(calculateUsual(rows, end));
   double? get usual => _baseline.usual;
 
-  /// Usual range (25th–75th percentile of the 28 days before [end]).
+  /// Usual range (usual ± the steady threshold, from the 28 days before [end]).
   double? get usualLow => _baseline.low;
   double? get usualHigh => _baseline.high;
 

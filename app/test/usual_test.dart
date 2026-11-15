@@ -172,14 +172,23 @@ void main() {
     expect(learning.restingHeartRate.status, UsualStatus.learning);
     expect(learning.steps.status, UsualStatus.learning);
   });
-  test('usual range is the 25th to 75th percentile of history', () {
-    final sleep = calculateUsual(
+  test('usual range is the usual plus or minus the steady threshold', () {
+    final summary = calculateUsual(
       rows([420, 430, 440, 450, 460, 470, 480, 490]),
       today,
-    ).sleep;
-    expect(sleep.low, closeTo(437.5, 1e-9));
-    expect(sleep.high, closeTo(472.5, 1e-9));
-    expect(sleep.low! <= sleep.usual! && sleep.usual! <= sleep.high!, isTrue);
+    );
+    expect(summary.sleep.usual, 455);
+    expect(summary.sleep.low, 440);
+    expect(summary.sleep.high, 470);
+    // A steady value lies inside the range.
+    expect(summary.sleep.status, UsualStatus.steady);
+    expect(summary.sleep.today! >= summary.sleep.low!, isTrue);
+    expect(summary.sleep.today! <= summary.sleep.high!, isTrue);
+  });
+  test('steps range is ten percent either side of the usual', () {
+    final steps = calculateUsual(heartAndSteps(steps: 8000), today).steps;
+    expect(steps.low, closeTo(steps.usual! * 0.9, 1e-9));
+    expect(steps.high, closeTo(steps.usual! * 1.1, 1e-9));
   });
   test('usual range is null while learning', () {
     final sleep = calculateUsual(rows([420, 430, 440]), today).sleep;
