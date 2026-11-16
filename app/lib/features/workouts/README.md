@@ -39,6 +39,9 @@ uncertain, short, unfinished, and already saved/active overlapping bouts need no
 pedometer queries.
 Completed bouts become reviews, never automatic saves. Distance continues to use
 the app's stride estimate; the native channel also exposes recorded distance.
+When a review has zero steps (including an unavailable pedometer), its card says
+“Steps unavailable” and shows no step, distance or calorie totals. Save/Discard
+remain available.
 
 The channel uses UserDefaults for per-account checkpoints and pending reviews,
 so `shared_preferences` is unnecessary. The checkpoint is the last safely
@@ -65,9 +68,17 @@ reminders use the default minimums: walk 10, run 3, bike 5 minutes. Multiple
 completed bouts produce “2 activities to review” (with the actual count).
 Dart saves and live workout snapshots advance `workouts.refresh.checked` to the
 maximum of its existing value and the workout end/measurement time. An active
-workout marker excludes overlapping bouts even while Dart is suspended; it clears
-on finish or a new Dart process. In-flight reminders are suppressed if workout
-state changes, and refresh never moves the cursor backward.
+workout marker stores both `from` and `through` and excludes overlapping bouts
+even while Dart is suspended. Both Swift and Dart ignore it after the earlier of
+`through + 15 minutes` and `from + 24 hours` (the exact boundary is still valid).
+Future/malformed snapshots and legacy onset-only native markers are invalid.
+The marker clears on finish or a new Dart process. UI clock refreshes retain the
+last detector snapshot; they do not renew its expiry or write to the channel.
+Detector updates send only changed start/measurement values; `setActiveWorkout`
+already advances the native cursor, avoiding a second call for that measurement.
+Unchanged/older cursor values and unchanged markers do not write UserDefaults
+or invalidate reminders. In-flight reminders are suppressed only when a marker
+changes or the cursor advances; refresh never moves the cursor backward.
 iOS decides when, or whether, to run a refresh. The earliest requested time is an
 hour away, and Background App Refresh settings and force quitting affect delivery.
 See [Apple's background task guidance](https://developer.apple.com/documentation/uikit/using-background-tasks-to-update-your-app).
@@ -85,9 +96,50 @@ path (such as PendingIntent transitions), a durable detector/session, and an
 appropriately declared foreground service for continuous tracking, with the
 corresponding runtime permissions and battery/background restrictions handled.
 
+## Shared motion history golden
+
+[`test/fixtures/workout_motion_history.json`](../../../test/fixtures/workout_motion_history.json)
+is read by `workout_motion_history_golden_test.dart` and RunnerTests'
+`testMotionHistoryGolden`. Xcode copies this same file into the RunnerTests
+bundle; there is no separate Swift fixture. Both tests check exact bout types,
+onsets, ends and the retained cursor. Swift tests call the pure replay helper
+used by the background refresh itself.
+
+Fixture times and the table's intervals are seconds from the window origin.
+Confidence uses CoreMotion's raw values: high 2, medium 1, low 0. `to` is 3600
+unless the case names a tail boundary. The retained cursor is `to` for completed
+cases; open tails retain their onset.
+
+| Fixture case | Input/rule | Expected completed bouts; cursor |
+| --- | --- | --- |
+| `completed_walk` | Walk then still | Walk 0–2100; `to` |
+| `walk_below_minimum` | 599 s walk | None; `to` |
+| `run_at_minimum` | 180 s run | Run 0–180; `to` |
+| `bike_at_minimum` | 300 s bike | Bike 0–300; `to` |
+| `still_gap_60` | Still 720–780 | Walk 0–2100; `to` |
+| `still_gap_61` | Still 720–781 | Walks 0–720, 781–2100; `to` |
+| `medium_gap_90` | One medium record 300–390 | Walk 0–2100; `to` |
+| `medium_gap_120` | One medium record 300–420 | Walk 0–2100; `to` |
+| `low_gap_120` | One low record 300–420 | Walk 0–2100; `to` |
+| `uncertain_gap_121` | Medium record 720–841 | Walks 0–720, 841–2100; `to` |
+| `repeated_uncertain_gaps` | Two 90 s uncertain gaps | Walks 0–1200, 1290–2400; `to` |
+| `consecutive_uncertain_records` | Medium then low, spanning 720–840 | Walks 0–720, 840–2100; `to` |
+| `uncertain_then_different_type` | Walk, medium, then run at 810 | Walk 0–720, run 810–1200; `to` |
+| `exercise_change` | Walk then run at 900 | Walk 0–900, run 900–1200; `to` |
+| `uncertain_tail_120` | Uncertainty at 720; `to` 840 | None; 0 |
+| `uncertain_tail_121` | Uncertainty at 720; `to` 841 | Walk 0–720; 841 |
+| `still_tail_60` | Still at 720; `to` 780 | None; 0 |
+| `still_tail_61` | Still at 720; `to` 781 | Walk 0–720; 781 |
+| `ongoing_tail` | Walk from 300 without an end | None; 300 |
+| `medium_only` | No high-confidence walk | None; `to` |
+| `low_only` | No high-confidence run | None; `to` |
+| `unsorted_pre_window` | Unsorted records; onset before window | Walk 0–2100; `to` |
+| `future_record_ignored` | Walk ends after query window | None; 0 |
+| `automotive_is_not_exercise` | High-confidence automotive | None; `to` |
+
 ## Real iPhone verification (requires Xcode; not verified in this workspace)
 
-Workspace validation: `flutter test` passed all 246 tests;
+Workspace validation: `flutter test` passed 277 tests (12 screenshot tests skipped);
 `flutter analyze --no-fatal-infos` passed with zero errors/warnings (SDK
 deprecation infos remain). The analyzer used
 `ANALYZER_STATE_LOCATION_OVERRIDE=/root/.cache/workout-analyzer` because this
@@ -127,6 +179,18 @@ workspace cannot write its default cache under `/root/.dartServer`.
    reminder. Compare Dart and native results for one 90/120-second medium/low
    record inside a walk, a 121-second gap, repeated uncertain records and a change
    of exercise type.
+8. Run the RunnerTests target, including the shared golden, active-marker expiry
+   and revision tests. Confirm its JSON resource resolves from the test bundle.
+   Start a live workout, suspend/terminate without finishing, then simulate a
+   refresh after `through + 15 minutes`: a later completed bout must produce a
+   reminder. Repeat at the exact expiry boundary and at the 24-hour onset cap;
+   a legacy Date-only marker must not suppress reminders.
+9. Observe the method channel and UserDefaults while the live card clock ticks:
+   only detector snapshots should update the marker/cursor. Repeated identical
+   payloads or an older cursor must leave `workoutRevision` unchanged and keep an
+   existing review reminder visible; a real update must cancel a stale reminder.
+   With no pedometer data, confirm the candidate says “Steps unavailable” without
+   zero steps, distance or calories, and Save/Discard still work.
 
 Android also needs a device build and API 33+ permission/action/body-tap checks;
 native platform builds and OS notification delivery were not run here.

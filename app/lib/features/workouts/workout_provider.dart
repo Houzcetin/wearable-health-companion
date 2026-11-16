@@ -216,6 +216,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
   DateTime? _lastDetectorAdvance;
   DateTime? _nativeCursor, _nativeActiveStart, _nativeActiveThrough;
   bool _nativeActiveInitialized = false;
+  WorkoutSession? _historyActive;
 
   @override
   WorkoutState build() {
@@ -245,6 +246,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
     _lastDetectorAdvance = _realClock();
     _nativeCursor = _nativeActiveStart = _nativeActiveThrough = null;
     _nativeActiveInitialized = false;
+    _historyActive = null;
     _notifications = WorkoutNotificationBridge(
       sink: ref.read(workoutNotificationSinkProvider),
       actions: this,
@@ -264,10 +266,6 @@ class WorkoutNotifier extends Notifier<WorkoutState>
             onStateChange: (value) {
               if (!ref.mounted || version != _buildVersion) return;
               _resumed = value == AppLifecycleState.resumed;
-              if (_resumed) {
-                _nativeCursor = null;
-                _nativeActiveInitialized = false;
-              }
               // A cached movement state cannot prove that activity continued
               // while Dart was suspended. Let history handle that missing period.
               if (_detector.phase == DetectorPhase.candidate &&
@@ -320,10 +318,10 @@ class WorkoutNotifier extends Notifier<WorkoutState>
 
   void _subscribe() {
     final generation = ++_generation;
-    void changed() {
+    void changed({bool detectorChanged = false}) {
       if (!ref.mounted || generation != _generation) return;
       _ensureTimer();
-      _publish();
+      _publish(detectorChanged: detectorChanged);
     }
 
     void failed(Object error) {
@@ -338,7 +336,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
         if (!ref.mounted || generation != _generation) return;
         _detector.addActivity(sample);
         _lastDetectorAdvance = _realClock();
-        changed();
+        changed(detectorChanged: true);
       },
       onError: failed,
       onDone: changed,
@@ -347,7 +345,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       (sample) {
         if (!ref.mounted || generation != _generation) return;
         _detector.addSteps(sample);
-        changed();
+        changed(detectorChanged: true);
       },
       onError: failed,
       onDone: changed,
@@ -378,7 +376,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       );
     }
     _detector.tick();
-    _publish();
+    _publish(detectorChanged: true);
     _loadToday();
     final now = _realClock();
     if (_lastRetryAt == null ||
@@ -399,7 +397,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
     );
   }
 
-  void _publish() {
+  void _publish({bool detectorChanged = false}) {
     for (final event in _detector.takeEvents()) {
       if (event is WorkoutFinished) {
         unawaited(_repository.save(event.session));
@@ -407,7 +405,18 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       }
     }
     final now = _detector.clock();
-    _syncNativeWorkouts(_detector.currentSession);
+    final active = _detector.currentSession;
+    // UI clocks and repository/notice changes do not measure a workout. Keep
+    // the last detector snapshot so these publishes neither renew its lease
+    // nor write to the native channel every second.
+    if (detectorChanged || active == null || _historyActive == null) {
+      _historyActive = active;
+    }
+    _syncNativeWorkouts(
+      _historyActive?.isFreshActiveAt(_realClock()) == true
+          ? _historyActive
+          : null,
+    );
     final today = _repository.sessions.where((session) {
       final date = session.startedAt.toLocal();
       final localNow = now.toLocal();
@@ -422,7 +431,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       activityStartedAt: _detector.activityStartedAt,
       startPrompt: _detector.startPrompt,
       stopPrompt: _detector.stopPrompt,
-      session: _detector.currentSession,
+      session: active,
       summary: _summary,
       todaySessions: List.unmodifiable(today),
       autoStart: _detector.autoStartPrompts,
@@ -481,6 +490,13 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       _nativeActiveStart = active?.startedAt;
       _nativeActiveThrough = active?.measuredAt;
       unawaited(source.setActiveWorkout(active).catchError((Object _) {}));
+      // setActiveWorkout also advances the cursor; avoid a second channel call
+      // for the same measurement.
+      final measuredAt = active?.measuredAt;
+      if (measuredAt != null &&
+          (_nativeCursor == null || measuredAt.isAfter(_nativeCursor!))) {
+        _nativeCursor = measuredAt;
+      }
     }
     if (_simulationClock != null) return;
     DateTime? through = active?.measuredAt;
@@ -524,7 +540,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       await history.check(
         enabled: _detector.autoStartPrompts && _simulationClock == null,
         weightKg: _detector.weightKg,
-        active: _detector.currentSession,
+        active: _historyActive,
       );
       if (!ref.mounted || version != _buildVersion) return;
       _historyNotice = null;
@@ -557,14 +573,14 @@ class WorkoutNotifier extends Notifier<WorkoutState>
   void setAutoStart(bool enabled) {
     _detector.autoStartPrompts = enabled;
     _detector.tick();
-    _publish();
+    _publish(detectorChanged: true);
     unawaited(checkHistory());
   }
 
   void setAutoStop(bool enabled) {
     _detector.autoStopPrompts = enabled;
     _detector.tick();
-    _publish();
+    _publish(detectorChanged: true);
   }
 
   bool setWeight(double weight) {
@@ -578,25 +594,25 @@ class WorkoutNotifier extends Notifier<WorkoutState>
   void acceptStart(ExerciseType type) {
     _detector.acceptStart(type);
     _ensureTimer();
-    _publish();
+    _publish(detectorChanged: true);
   }
 
   @override
   void dismissStart() {
     _detector.dismissStart();
-    _publish();
+    _publish(detectorChanged: true);
   }
 
   @override
   void acceptStop() {
     _detector.acceptStop();
-    _publish();
+    _publish(detectorChanged: true);
   }
 
   @override
   void dismissStop() {
     _detector.dismissStop();
-    _publish();
+    _publish(detectorChanged: true);
   }
 
   /// Re-reads the detector without advancing it, e.g. for a live elapsed timer.
@@ -610,7 +626,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
   void manualStart(ExerciseType type) {
     _detector.manualStart(type);
     _ensureTimer();
-    _publish();
+    _publish(detectorChanged: true);
   }
 
   Future<void> setSimulator(bool enabled) async {

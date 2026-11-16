@@ -136,6 +136,29 @@ void main() {
     );
   });
 
+  testWidgets('zero-step review shows Steps unavailable and remains saveable', (
+    tester,
+  ) async {
+    final history = FakeMotionHistory(DateTime(2026, 11, 16, 9, 10))
+      ..stepsResult = const HistorySteps(0, distance: 0);
+    await show(tester, history: history);
+    expect(
+      find.text('Did you walk 09:10–09:45? Steps unavailable'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('0 steps'), findsNothing);
+    expect(find.textContaining('km'), findsNothing);
+    expect(
+      find.textContaining(RegExp('calori', caseSensitive: false)),
+      findsNothing,
+    );
+    expect(container.read(workoutProvider).historyCandidates.single.steps, 0);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(container.read(workoutProvider).historyCandidates, isEmpty);
+    expect(container.read(workoutProvider).todaySessions.single.steps, 0);
+  });
+
   testWidgets(
     'lifecycle routes background prompts to notifications and action to notifier',
     (tester) async {
