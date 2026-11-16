@@ -15,6 +15,8 @@ import 'support/stage5_harness.dart';
 void main() {
   Future<void> tapAction(WidgetTester tester, String text) async {
     await tester.ensureVisible(find.text(text));
+    // Lay out the scrolled list before tapping where the row now is.
+    await tester.pump();
     await tester.tap(find.text(text));
     await tester.pumpAndSettle();
   }

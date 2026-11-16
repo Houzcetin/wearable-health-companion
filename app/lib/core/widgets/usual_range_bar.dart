@@ -13,14 +13,16 @@ class UsualRangeBar extends StatelessWidget {
     required this.low,
     required this.high,
     required this.color,
-    required this.tint,
   });
   final double value, usual, low, high;
-  final Color color, tint;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Stronger than the icon tint so the band reads against the grey track.
+    final band = Color.alphaBlend(
+      color.withValues(alpha: 0.3), scheme.surfaceContainerLowest);
     var lo = math.min(math.min(low, value), usual);
     var hi = math.max(math.max(high, value), usual);
     final spread = hi - lo;
@@ -49,7 +51,7 @@ class UsualRangeBar extends StatelessWidget {
                 width: math.max((at(high) - at(low)) * width, 4),
                 top: 4, height: 8,
                 child: DecoratedBox(decoration: BoxDecoration(
-                  color: tint,
+                  color: band,
                   borderRadius: BorderRadius.circular(4),
                 )),
               ),
