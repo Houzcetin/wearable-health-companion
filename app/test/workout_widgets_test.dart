@@ -301,7 +301,7 @@ void main() {
       await tester.tap(find.text('Start Run instead'));
       await tester.pumpAndSettle();
       expect(find.text('Run · 10:00'), findsOneWidget);
-      expect(find.text('1000 steps · 0.75 km'), findsOneWidget);
+      expect(find.text('1,000 steps · 0.75 km'), findsOneWidget);
       advance(const Duration(minutes: 1));
       steps.emit(2160);
       await tester.pumpAndSettle();

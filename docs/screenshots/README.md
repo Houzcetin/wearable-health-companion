@@ -7,6 +7,7 @@ network is needed.
 | Screen | Files |
 | --- | --- |
 | Today (steady and changed metrics, a workout logged today) | `today_{light,dark}.png`, `today_{light,dark}_2.png` (scrolled) |
+| Today with a "Did you walk…" history review card | `today_candidate_{light,dark}.png` |
 | Today while learning (4 of 7 days) | `today_learning_{light,dark}.png` |
 | Trends: sleep, month, nights outside the usual range | `trends_{light,dark}.png`, `trends_{light,dark}_2.png` (scrolled) |
 | Coach with history and an open "Numbers used" panel | `coach_{light,dark}.png` |

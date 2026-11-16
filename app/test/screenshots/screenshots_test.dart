@@ -23,6 +23,7 @@ import 'package:wearable_companion/features/workouts/data/workout_repository.dar
 import 'package:wearable_companion/features/workouts/workout_provider.dart';
 
 import '../support/fake_repositories.dart';
+import '../support/motion_history_fake.dart';
 import '../support/workout_fakes.dart';
 
 /// Renders the main screens in light and dark mode at 390×844 @2x with real
@@ -72,6 +73,7 @@ void main() {
     FakeHealthRepository? health,
     FakeCoachRepository? coach,
     List<DateTime> workoutStarts = const [],
+    bool historyCandidate = false,
   }) async {
     tester.view.physicalSize = const Size(780, 1688);
     tester.view.devicePixelRatio = 2;
@@ -100,6 +102,9 @@ void main() {
       stepSourceProvider.overrideWithValue(steps),
       workoutTickIntervalProvider.overrideWithValue(null),
       workoutRepositoryProvider.overrideWithValue(repository),
+      if (historyCandidate)
+        motionHistorySourceProvider.overrideWithValue(
+          FakeMotionHistory(DateTime(2026, 11, 12, 9, 10))),
     ]);
     addTearDown(() async {
       container.dispose();
@@ -167,6 +172,13 @@ void main() {
       await shoot(tester, 'today_$suffix');
       await scrollDown(tester);
       await shoot(tester, 'today_${suffix}_2');
+    },
+    'today_candidate': (WidgetTester tester, Brightness b, String suffix) async {
+      await pumpScreen(tester, const TodayScreen(), b,
+        health: FakeHealthRepository(rows: richHistory()),
+        historyCandidate: true);
+      await scrollDown(tester, 1200);
+      await shoot(tester, 'today_candidate_$suffix');
     },
     'today_learning': (WidgetTester tester, Brightness b, String suffix) async {
       await pumpScreen(tester, const TodayScreen(), b,
@@ -236,7 +248,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Workout detection'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('Auto-stop prompts'));
+      await tester.ensureVisible(find.text('Enable workout notifications'));
       await tester.pumpAndSettle();
       await shoot(tester, 'settings_${suffix}_workout');
     },
