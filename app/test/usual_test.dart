@@ -199,26 +199,18 @@ void main() {
     expect(sleep.usual, 460);
     expect(sleep.low, 410); // p25, not 445
     expect(sleep.high, 510); // p75, not 475
-    // 430 is "changed" by the steady threshold but inside the usual range.
-    expect(
-      calculateUsual(
-        rows([
-          360,
-          380,
-          400,
-          420,
-          440,
-          460,
-          480,
-          500,
-          520,
-          540,
-          560,
-        ], current: 430),
-        today,
-      ).sleep.status,
-      UsualStatus.changed,
-    );
+    const spread = [360, 380, 400, 420, 440, 460, 480, 500, 520, 540, 560];
+    UsualStatus statusOf(int value) =>
+        calculateUsual(rows(spread, current: value), today).sleep.status;
+    // 430 is 30 min from the usual, beyond the 15-min threshold, but inside
+    // the usual range, so it is steady.
+    expect(calculateUsual(rows(spread, current: 430), today).sleep.delta, -30);
+    expect(statusOf(430), UsualStatus.steady);
+    // Both bounds are inclusive; just past them is changed.
+    expect(statusOf(410), UsualStatus.steady);
+    expect(statusOf(510), UsualStatus.steady);
+    expect(statusOf(409), UsualStatus.changed);
+    expect(statusOf(511), UsualStatus.changed);
   });
   test('narrow spread: range never narrower than the steady threshold', () {
     final sleep = calculateUsual(
