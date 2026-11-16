@@ -223,6 +223,7 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
       _notify();
       return;
     }
+    String? rejectedError;
     final attempted = <String>{};
     // Include saves made during an in-flight insert, but try each id only once.
     while (!_disposed) {
@@ -287,7 +288,7 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
           continue;
         }
         _pending.remove(id);
-        if (permanentError != null) _permanentError = permanentError;
+        if (permanentError != null) rejectedError = permanentError;
       } else {
         final paused = failure is PostgrestException && failure.code == '42501';
         final error = paused
@@ -312,6 +313,9 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
         }
       }
     }
+    // Rejected rows have left the queue. Keep their notice for this flush only,
+    // so the next completed flush can report the current sync state.
+    _permanentError = rejectedError;
     if (_pending.isEmpty) _saveError = null;
     _notify();
   }

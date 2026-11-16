@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wearable_companion/core/router.dart';
 import 'package:wearable_companion/data/auth_repository.dart';
 import 'package:wearable_companion/data/providers.dart';
@@ -13,6 +14,8 @@ import 'support/fake_repositories.dart';
 import 'support/stage5_harness.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   Future<void> tapAction(WidgetTester tester, String text) async {
     await tester.ensureVisible(find.text(text));
     // Lay out the scrolled list before tapping where the row now is.

@@ -113,6 +113,28 @@ void main() {
   );
 
   test(
+    'concurrent writes across handles survive an earlier failed operation',
+    () async {
+      await queue.clear();
+      final fresh = PendingWorkoutQueue('user-a', clock: () => now);
+      final other = PendingWorkoutQueue('user-a', clock: () => now);
+      final first = entry();
+      final second = entry();
+      final third = entry();
+      final rejected = queue.add(entry());
+      final savingFirst = fresh.add(first);
+      final savingSecond = other.add(second);
+      await expectLater(rejected, throwsStateError);
+      final savingThird = fresh.add(third);
+      await Future.wait([savingFirst, savingSecond, savingThird]);
+      expect(
+        (await fresh.load()).map((row) => row.id),
+        unorderedEquals([first.id, second.id, third.id]),
+      );
+    },
+  );
+
+  test(
     'clear removes backups and blocks late writes from old handles',
     () async {
       final saved = entry();
