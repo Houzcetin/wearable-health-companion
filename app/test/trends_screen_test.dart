@@ -42,7 +42,7 @@ void main() {
     expect(chart.data.barGroups[4].barRods, isEmpty);
     expect(find.textContaining('1 day missing.'), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp('Nov 10, 2026: no data')), findsOneWidget);
-    expect(find.text('Still learning your usual'), findsOneWidget);
+    expect(find.text('Still learning your usual range'), findsOneWidget);
     semantics.dispose();
   });
 

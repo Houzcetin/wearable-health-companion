@@ -148,7 +148,7 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
               style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
             if (data.learning) ...[
               const SizedBox(height: AppSpace.s),
-              Text('Still learning your usual',
+              Text('Still learning your usual range',
                 style: theme.textTheme.bodySmall?.copyWith(color: muted)),
             ],
             const SizedBox(height: AppSpace.xl),
