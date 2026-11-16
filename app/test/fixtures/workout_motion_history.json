@@ -1,0 +1,29 @@
+{
+  "description": "Times are seconds from the window origin; confidence is CoreMotion raw 0/1/2. Expected bouts and checkedThrough use default detector thresholds.",
+  "cases": [
+    {"name":"completed_walk","to":3600,"activities":[[0,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
+    {"name":"walk_below_minimum","to":3600,"activities":[[0,"walking",2],[599,"stationary",2]],"bouts":[],"checkedThrough":3600},
+    {"name":"run_at_minimum","to":3600,"activities":[[0,"running",2],[180,"stationary",2]],"bouts":[["run",0,180]],"checkedThrough":3600},
+    {"name":"bike_at_minimum","to":3600,"activities":[[0,"cycling",2],[300,"stationary",2]],"bouts":[["bike",0,300]],"checkedThrough":3600},
+    {"name":"still_gap_60","to":3600,"activities":[[0,"walking",2],[720,"stationary",2],[780,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
+    {"name":"still_gap_61","to":3600,"activities":[[0,"walking",2],[720,"stationary",2],[781,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,720],["walk",781,2100]],"checkedThrough":3600},
+    {"name":"medium_gap_90","to":3600,"activities":[[0,"walking",2],[300,"unknown",1],[390,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
+    {"name":"medium_gap_120","to":3600,"activities":[[0,"walking",2],[300,"walking",1],[420,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
+    {"name":"low_gap_120","to":3600,"activities":[[0,"walking",2],[300,"unknown",0],[420,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
+    {"name":"uncertain_gap_121","to":3600,"activities":[[0,"walking",2],[720,"unknown",1],[841,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,720],["walk",841,2100]],"checkedThrough":3600},
+    {"name":"repeated_uncertain_gaps","to":3600,"activities":[[0,"walking",2],[300,"unknown",1],[390,"walking",2],[1200,"unknown",0],[1290,"walking",2],[2400,"stationary",2]],"bouts":[["walk",0,1200],["walk",1290,2400]],"checkedThrough":3600},
+    {"name":"consecutive_uncertain_records","to":3600,"activities":[[0,"walking",2],[720,"unknown",1],[780,"unknown",0],[840,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,720],["walk",840,2100]],"checkedThrough":3600},
+    {"name":"uncertain_then_different_type","to":3600,"activities":[[0,"walking",2],[720,"unknown",1],[810,"running",2],[1200,"stationary",2]],"bouts":[["walk",0,720],["run",810,1200]],"checkedThrough":3600},
+    {"name":"exercise_change","to":3600,"activities":[[0,"walking",2],[900,"running",2],[1200,"stationary",2]],"bouts":[["walk",0,900],["run",900,1200]],"checkedThrough":3600},
+    {"name":"uncertain_tail_120","to":840,"activities":[[0,"walking",2],[720,"unknown",1]],"bouts":[],"checkedThrough":0},
+    {"name":"uncertain_tail_121","to":841,"activities":[[0,"walking",2],[720,"unknown",1]],"bouts":[["walk",0,720]],"checkedThrough":841},
+    {"name":"still_tail_60","to":780,"activities":[[0,"walking",2],[720,"stationary",2]],"bouts":[],"checkedThrough":0},
+    {"name":"still_tail_61","to":781,"activities":[[0,"walking",2],[720,"stationary",2]],"bouts":[["walk",0,720]],"checkedThrough":781},
+    {"name":"ongoing_tail","to":3600,"activities":[[300,"walking",2]],"bouts":[],"checkedThrough":300},
+    {"name":"medium_only","to":3600,"activities":[[0,"walking",1],[2100,"stationary",2]],"bouts":[],"checkedThrough":3600},
+    {"name":"low_only","to":3600,"activities":[[0,"running",0],[2100,"stationary",2]],"bouts":[],"checkedThrough":3600},
+    {"name":"unsorted_pre_window","to":3600,"activities":[[2100,"stationary",2],[-300,"walking",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
+    {"name":"future_record_ignored","to":3600,"activities":[[0,"walking",2],[3700,"stationary",2]],"bouts":[],"checkedThrough":0},
+    {"name":"automotive_is_not_exercise","to":3600,"activities":[[0,"automotive",2],[2100,"stationary",2]],"bouts":[],"checkedThrough":3600}
+  ]
+}

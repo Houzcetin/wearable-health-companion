@@ -30,6 +30,16 @@ class WorkoutSession {
   final double strideMeters;
   final double? recordedDistanceMeters, recordedCalories;
 
+  /// A suspended/killed process cannot keep suppressing history indefinitely.
+  /// Match the native marker: 15 minutes after its snapshot, capped at 24 hours
+  /// from onset. Finished, future and malformed snapshots are never active.
+  bool isFreshActiveAt(DateTime at) =>
+      endedAt == null &&
+      !measuredAt.isBefore(startedAt) &&
+      !measuredAt.isAfter(at) &&
+      !at.isAfter(measuredAt.add(const Duration(minutes: 15))) &&
+      !at.isAfter(startedAt.add(const Duration(hours: 24)));
+
   Duration get duration => (endedAt ?? measuredAt).difference(startedAt);
   double get distanceMeters => recordedDistanceMeters ?? steps * strideMeters;
   double get calories =>

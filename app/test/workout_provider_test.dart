@@ -10,6 +10,7 @@ import 'package:wearable_companion/features/workouts/data/motion_history_source.
 import 'package:wearable_companion/features/workouts/data/workout_repository.dart';
 import 'package:wearable_companion/features/workouts/data/workout_row.dart';
 import 'package:wearable_companion/features/workouts/domain/activity_sample.dart';
+import 'package:wearable_companion/features/workouts/domain/workout_session.dart';
 import 'package:wearable_companion/features/workouts/workout_provider.dart';
 
 import 'support/fake_repositories.dart';
@@ -211,11 +212,11 @@ void main() {
       final start = now;
       notifier.manualStart(ExerciseType.walk);
       expect(history.activeWorkouts.last!.startedAt, start);
-      expect(history.cursorAdvances.last, start);
+      expect(history.refreshCursor, start);
       now = now.add(const Duration(minutes: 10));
       notifier.tick();
       expect(history.activeWorkouts.last!.measuredAt, now);
-      expect(history.cursorAdvances.last, now);
+      expect(history.refreshCursor, now);
       notifier.acceptStop();
       await settle();
       expect(history.activeWorkouts.last, isNull);
@@ -233,6 +234,83 @@ void main() {
       await settle();
       expect(history.cursorAdvances, hasLength(before));
       expect(history.refreshCursor, savedLater.endedAt);
+    },
+  );
+
+  test(
+    'UI refreshes and unchanged publishes do not write native workout state',
+    () async {
+      final history = FakeMotionHistory(now)..activities = [];
+      final repository = InMemoryWorkoutRepository();
+      await setup(configured: false, repository: repository, history: history);
+      final notifier = container.read(workoutProvider.notifier);
+      notifier.manualStart(ExerciseType.walk);
+      expect(
+        history.activeWorkouts,
+        hasLength(2),
+      ); // Initial clear, then start.
+      expect(history.cursorAdvances, isEmpty); // Start already advances it.
+      final snapshot = history.activeWorkouts.last!;
+      for (var second = 0; second < 10; second++) {
+        now = now.add(const Duration(seconds: 1));
+        notifier.refresh();
+        notifier.setWeight(80);
+      }
+      await notifier.checkHistory();
+      expect(container.read(workoutProvider).session!.measuredAt, now);
+      expect(history.activeWorkouts, hasLength(2));
+      expect(history.activeWorkouts.last, same(snapshot));
+      expect(history.cursorAdvances, isEmpty);
+      notifier.tick();
+      expect(history.activeWorkouts, hasLength(3));
+      expect(history.activeWorkouts.last!.measuredAt, now);
+      expect(history.cursorAdvances, isEmpty);
+      notifier.tick(); // Same snapshot time.
+      notifier.refresh();
+      expect(history.activeWorkouts, hasLength(3));
+      now = now.add(const Duration(seconds: 1));
+      notifier.acceptStop();
+      await settle();
+      expect(history.activeWorkouts, hasLength(4));
+      expect(history.activeWorkouts.last, isNull);
+      expect(history.cursorAdvances, [now]);
+      notifier.refresh();
+      notifier.tick();
+      expect(history.activeWorkouts, hasLength(4));
+      expect(history.cursorAdvances, [now]);
+    },
+  );
+
+  test(
+    'history checks do not renew an expired active snapshot from the UI clock',
+    () async {
+      final start = now;
+      final history = FakeMotionHistory(start)..activities = [];
+      await setup(configured: false, history: history);
+      final notifier = container.read(workoutProvider.notifier);
+      notifier.manualStart(ExerciseType.walk);
+      history.activities = [
+        ActivitySample(
+          type: ActivityType.walking,
+          confidence: 100,
+          timestamp: start,
+        ),
+        ActivitySample(
+          type: ActivityType.still,
+          confidence: 100,
+          timestamp: start.add(const Duration(minutes: 35)),
+        ),
+      ];
+      now = start.add(const Duration(hours: 1)); // No detector delivery.
+      notifier.refresh();
+      await notifier.checkHistory();
+      expect(history.activeWorkouts.last, isNull);
+      expect(
+        history.activeWorkouts.whereType<WorkoutSession>().single.measuredAt,
+        start,
+      );
+      expect(container.read(workoutProvider).historyCandidates, hasLength(1));
+      expect(history.stepRanges, hasLength(1));
     },
   );
 

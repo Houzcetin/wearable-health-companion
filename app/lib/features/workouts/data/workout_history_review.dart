@@ -80,7 +80,11 @@ class WorkoutHistoryReview {
       steps: const [],
       from: from,
       to: to,
-      existing: [...repository.sessions, ...candidates, ?active],
+      existing: [
+        ...repository.sessions,
+        ...candidates,
+        if (active != null && active.isFreshActiveAt(to)) active,
+      ],
       weightKg: weightKg,
     );
     final measured = <WorkoutSession>[];
