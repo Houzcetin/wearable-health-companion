@@ -497,14 +497,15 @@ class _MetricCard extends StatelessWidget {
             children: [
               MetricIcon(icon: icon, color: color, tint: tint),
               const SizedBox(width: AppSpace.m),
-              Expanded(
-                flex: 2,
+              // The title keeps its natural width (capped), the value takes
+              // the rest and sits flush right.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
                 child: Text(title, style: theme.textTheme.titleSmall,
                   maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
               const SizedBox(width: AppSpace.s),
-              Flexible(
-                flex: 3,
+              Expanded(
                 child: Text(value, style: theme.textTheme.titleLarge,
                   textAlign: TextAlign.end, maxLines: 1,
                   overflow: TextOverflow.ellipsis),

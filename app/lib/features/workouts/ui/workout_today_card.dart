@@ -46,10 +46,14 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
     final candidate = state.candidateType;
     final theme = Theme.of(context);
     final palette = MetricColors.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final body = theme.textTheme.bodyMedium;
+    final note = theme.textTheme.bodySmall?.copyWith(color: muted);
     return WorkoutPromptHost(
       child: AppCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 8,
           children: [
             Row(
               children: [
@@ -67,14 +71,15 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             if (session != null) ...[
               Text(
                 '${session.type.label} · ${workoutDuration(session.duration)}',
                 style: theme.textTheme.titleLarge,
               ),
               Text(
-                '${session.steps} steps · ${(session.distanceMeters / 1000).toStringAsFixed(2)} km',
+                '${_steps(session.steps)} steps · ${(session.distanceMeters / 1000).toStringAsFixed(2)} km',
+                style: body?.copyWith(color: muted),
               ),
               FilledButton.tonal(
                 onPressed: ref.read(workoutProvider.notifier).acceptStop,
@@ -83,23 +88,29 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
             ] else if (candidate != null && state.activityStartedAt != null)
               Text(
                 "Looks like you're ${activityVerb(candidate)} (${state.now.difference(state.activityStartedAt!).inMinutes} min)",
+                style: body,
               )
             else
-              Text(state.autoStart ? 'Watching' : 'Auto-start prompts off'),
-            if (state.sensorNotice != null)
-              Text(state.sensorNotice!, style: theme.textTheme.bodySmall),
-            if (state.simulator) const Text('Simulator · 20× speed'),
-            if (state.historyNotice != null) Text(state.historyNotice!),
+              Text(
+                state.autoStart ? 'Watching' : 'Auto-start prompts off',
+                style: body?.copyWith(color: muted),
+              ),
+            if (state.sensorNotice != null) Text(state.sensorNotice!, style: note),
+            if (state.simulator) Text('Simulator · 20× speed', style: note),
+            if (state.historyNotice != null)
+              Text(state.historyNotice!, style: note),
             for (final review in state.historyCandidates) ...[
-              const Divider(),
+              const Divider(height: 24),
               Text(
                 'Did you ${review.type.name == 'bike' ? 'cycle' : review.type.name} '
                 '${DateFormat.Hm().format(review.startedAt.toLocal())}–'
                 '${DateFormat.Hm().format(review.endedAt!.toLocal())}? '
                 '${NumberFormat.decimalPattern().format(review.steps)} steps',
+                style: body?.copyWith(fontWeight: FontWeight.w600),
               ),
               Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   FilledButton.tonal(
                     onPressed: () => ref
@@ -117,14 +128,14 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
               ),
             ],
             if (state.todaySessions.isNotEmpty) ...[
-              const Divider(),
+              const Divider(height: 24),
               Text("Today's workouts", style: theme.textTheme.titleSmall),
               for (final workout in state.todaySessions)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(workout.type.label),
                   subtitle: Text(
-                    '${DateFormat.Hm().format(workout.startedAt.toLocal())} · ${workoutDuration(workout.duration)} · ${workout.steps} steps',
+                    '${DateFormat.Hm().format(workout.startedAt.toLocal())} · ${_minutes(workout.duration)} · ${_steps(workout.steps)} steps',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => showWorkoutSummary(context, workout),
@@ -135,4 +146,14 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
       ),
     );
   }
+}
+
+String _steps(int steps) => NumberFormat.decimalPattern('en').format(steps);
+
+/// A finished workout's length: "30 min", or "1 h 05 min" from an hour up.
+String _minutes(Duration duration) {
+  final minutes = duration.inMinutes;
+  return minutes < 60
+      ? '$minutes min'
+      : '${minutes ~/ 60} h ${(minutes % 60).toString().padLeft(2, '0')} min';
 }

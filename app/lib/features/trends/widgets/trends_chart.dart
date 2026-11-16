@@ -33,8 +33,11 @@ class _TrendsChartState extends State<TrendsChart> {
     };
     // With a usual range, days inside it are muted so the off days stand out.
     final hasRange = data.usualLow != null && data.usualHigh != null;
-    final muted = Color.alphaBlend(color.withValues(alpha: 0.32), scheme.surfaceContainerLowest);
-    final band = color.withValues(alpha: 0.12);
+    // Dark surfaces need a stronger tint for the same visual separation.
+    final dark = theme.brightness == Brightness.dark;
+    final muted = Color.alphaBlend(
+      color.withValues(alpha: dark ? 0.5 : 0.32), scheme.surfaceContainerLowest);
+    final band = color.withValues(alpha: dark ? 0.22 : 0.12);
     final usual = data.usual;
     final maxValue = [
       1.0,
@@ -126,8 +129,11 @@ class _TrendsChartState extends State<TrendsChart> {
                           final i = value.toInt();
                           if (i < 0 || i >= days.length) return const SizedBox.shrink();
                           final day = days[i];
+                          // The last day is always labelled, unless a weekly
+                          // label is right next to it and would collide.
+                          final last = days.length - 1;
                           final labelDate = data.range == TrendRange.week ||
-                              i % 7 == 0 || i == days.length - 1;
+                              (i % 7 == 0 && last - i >= 3) || i == last;
                           return Column(children: [
                             if (day.value == null)
                               Tooltip(

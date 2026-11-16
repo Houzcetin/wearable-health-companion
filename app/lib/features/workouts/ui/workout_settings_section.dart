@@ -58,6 +58,7 @@ class _WorkoutSettingsSectionState
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: 8,
                 children: [
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
@@ -144,21 +145,24 @@ class _WorkoutSettingsSectionState
                         ),
                       ],
                     ),
-                    const Text(
+                    Text(
                       'Updates every 15 seconds. Use Start when prompted, then Stop moving to see the stop prompt.',
+                      style: _note(context),
                     ),
                   ],
-                  if (state.sensorNotice != null) Text(state.sensorNotice!),
+                  if (state.sensorNotice != null)
+                    Text(state.sensorNotice!, style: _note(context)),
                   OutlinedButton.icon(
                     onPressed: notifier.requestNotificationPermission,
                     icon: const Icon(Icons.notifications_outlined),
                     label: const Text('Enable workout notifications'),
                   ),
-                  if (state.historyNotice != null) Text(state.historyNotice!),
-                  const SizedBox(height: 8),
+                  if (state.historyNotice != null)
+                    Text(state.historyNotice!, style: _note(context)),
+                  const SizedBox(height: 4),
                   Text(
                     'Signed-in workouts sync with health consent. Other workouts and settings last for this app session. On iPhone, recent motion history is checked when you return. Background refresh reminders depend on iOS. Live prompts need the app to be running.',
-                    style: Theme.of(context).textTheme.bodySmall,
+                    style: _note(context),
                   ),
                 ],
               ),
@@ -169,3 +173,8 @@ class _WorkoutSettingsSectionState
     );
   }
 }
+
+TextStyle? _note(BuildContext context) => Theme.of(context)
+    .textTheme
+    .bodySmall
+    ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
