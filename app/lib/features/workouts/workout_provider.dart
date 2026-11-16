@@ -64,7 +64,11 @@ final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
   }
   final WorkoutRepository repository = store == null
       ? InMemoryWorkoutRepository()
-      : SupabaseWorkoutRepository(store: store, userId: userId!);
+      : SupabaseWorkoutRepository(
+          store: store,
+          userId: userId!,
+          clock: ref.read(workoutClockProvider),
+        );
   ref.onDispose(repository.dispose);
   return repository;
 });

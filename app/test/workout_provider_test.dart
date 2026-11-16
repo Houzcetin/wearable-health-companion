@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wearable_companion/data/auth_repository.dart';
 import 'package:wearable_companion/data/profile_repository.dart';
 import 'package:wearable_companion/data/providers.dart';
@@ -73,6 +74,7 @@ void main() {
   }
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     now = DateTime(2026, 11, 16, 12);
     store = FakeWorkoutStore();
   });
@@ -208,6 +210,7 @@ void main() {
       await settle();
       expect(store.inserts, hasLength(1));
       store.failInserts = false;
+      now = now.add(const Duration(minutes: 1));
       notifier.tick();
       await settle();
       expect(store.inserts, hasLength(2));
@@ -303,8 +306,49 @@ void main() {
       await settle();
       expect(container.read(workoutRepositoryProvider), same(repository));
       store.failInserts = false;
+      now = now.add(const Duration(minutes: 1));
       await repository.retryPending();
       expect(store.rows, hasLength(1));
+    },
+  );
+
+  test(
+    'account changes retain pending rows until their owner signs back in',
+    () async {
+      await setup();
+      store.failInserts = true;
+      final workoutA = finishedWorkout();
+      await container.read(workoutRepositoryProvider).save(workoutA);
+      auth.emit(const AppUser(id: 'user-b'));
+      await settle();
+      await container.read(profileProvider.future);
+      await settle();
+      expect(container.read(workoutProvider).todaySessions, isEmpty);
+      expect(store.inserts, hasLength(1));
+      final workoutB = finishedWorkout();
+      await container.read(workoutRepositoryProvider).save(workoutB);
+      expect(store.inserts.last['user_id'], 'user-b');
+      now = now.add(const Duration(minutes: 1));
+      store.failInserts = false;
+      auth.emit(testUser);
+      await settle();
+      await container.read(profileProvider.future);
+      await settle();
+      await container.read(workoutRepositoryProvider).retryPending();
+      expect(store.rows.single['id'], workoutA.id);
+      expect(
+        container.read(workoutProvider).todaySessions.single.id,
+        workoutA.id,
+      );
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getString('workouts.pending.v1.user-b'),
+        contains(workoutB.id!),
+      );
+      expect(
+        preferences.containsKey('workouts.pending.v1.${testUser.id}'),
+        isFalse,
+      );
     },
   );
 }

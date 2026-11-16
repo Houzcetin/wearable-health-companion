@@ -38,13 +38,22 @@ Deno.test("export projects identity and connection fields, scopes every table an
         if (table === "profiles") {
           return Promise.resolve(Response.json({ user_id: userId, timezone: "UTC" }));
         }
-        if (table === "daily_metrics" || table === "workouts") {
+        if (table === "workouts") {
           const offset = Number(url.searchParams.get("offset"));
-          const key = table === "workouts" ? "started_at" : "date";
+          // Equal start times cross the page boundary; ids break the tie.
+          return Promise.resolve(Response.json(
+            Array.from({ length: offset === 0 ? 1000 : 1 }, (_, i) => ({
+              id: String(offset + i).padStart(4, "0"),
+              started_at: "2026-11-16T10:00:00Z",
+            })),
+          ));
+        }
+        if (table === "daily_metrics") {
+          const offset = Number(url.searchParams.get("offset"));
           return Promise.resolve(Response.json(
             offset === 0
-              ? Array.from({ length: 1000 }, (_, i) => ({ [key]: String(i) }))
-              : [{ [key]: "last" }],
+              ? Array.from({ length: 1000 }, (_, i) => ({ date: String(i) }))
+              : [{ date: "last" }],
           ));
         }
         return Promise.resolve(Response.json([{ id: 1 }]));
@@ -68,7 +77,8 @@ Deno.test("export projects identity and connection fields, scopes every table an
   });
   assertEquals(body.daily_metrics.length, 1001);
   assertEquals(body.workouts.length, 1001);
-  assertEquals(body.workouts.at(-1), { started_at: "last" });
+  assertEquals(body.workouts.at(-1), { id: "1000", started_at: "2026-11-16T10:00:00Z" });
+  assertEquals(new Set(body.workouts.map((row: { id: string }) => row.id)).size, 1001);
   for (const value of ["private-vault-id", "private-health-id", "private-token", "app_metadata"]) {
     assert(!JSON.stringify(body).includes(value));
   }
@@ -84,8 +94,17 @@ Deno.test("export projects identity and connection fields, scopes every table an
     "id.asc",
   );
   assertEquals(
-    queries.find((url) => url.pathname.endsWith("workouts"))?.searchParams.get("order"),
-    "started_at.asc",
+    queries.find((url) => url.pathname.endsWith("consent_events"))?.searchParams.get("order"),
+    "id.asc",
+  );
+  const workoutQueries = queries.filter((url) => url.pathname.endsWith("workouts"));
+  assertEquals(workoutQueries.map((url) => url.searchParams.get("order")), [
+    "started_at.asc,id.asc",
+    "started_at.asc,id.asc",
+  ]);
+  assertEquals(
+    workoutQueries.map((url) => url.searchParams.get("offset")),
+    ["0", "1000"],
   );
 });
 

@@ -27,6 +27,7 @@ class FakeWorkoutStore implements WorkoutStore {
   final loads = <({String userId, DateTime from, DateTime to})>[];
   List<Map<String, dynamic>> rows = [];
   bool failInserts = false, failLoads = false;
+  Object? insertError;
   Completer<void>? insertGate;
   Future<List<Map<String, dynamic>>> Function(String)? onLoad;
 
@@ -34,6 +35,7 @@ class FakeWorkoutStore implements WorkoutStore {
   Future<void> insertIgnoringDuplicates(Map<String, dynamic> row) async {
     inserts.add(Map.of(row));
     await insertGate?.future;
+    if (insertError != null) throw insertError!;
     if (failInserts) throw StateError('offline');
     if (!rows.any((saved) => saved['id'] == row['id'])) rows.add(Map.of(row));
   }
