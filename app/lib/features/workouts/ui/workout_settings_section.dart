@@ -149,9 +149,15 @@ class _WorkoutSettingsSectionState
                     ),
                   ],
                   if (state.sensorNotice != null) Text(state.sensorNotice!),
+                  OutlinedButton.icon(
+                    onPressed: notifier.requestNotificationPermission,
+                    icon: const Icon(Icons.notifications_outlined),
+                    label: const Text('Enable workout notifications'),
+                  ),
+                  if (state.historyNotice != null) Text(state.historyNotice!),
                   const SizedBox(height: 8),
                   Text(
-                    'Signed-in workouts sync with health consent. Other workouts and settings last for this app session. Detection works while the app is running.',
+                    'Signed-in workouts sync with health consent. Other workouts and settings last for this app session. On iPhone, recent motion history is checked when you return. Background refresh reminders depend on iOS. Live prompts need the app to be running.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
