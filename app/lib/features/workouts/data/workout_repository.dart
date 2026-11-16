@@ -119,7 +119,7 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
     required this.store,
     required this.userId,
     DateTime Function()? clock,
-  }) : _queue = PendingWorkoutQueue(userId),
+  }) : _queue = PendingWorkoutQueue(userId, clock: clock),
        _clock = clock ?? DateTime.now {
     unawaited(retryPending());
   }
@@ -134,7 +134,11 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
   String? _saveError, _loadError, _permanentError;
 
   @override
-  String? get lastError => _permanentError ?? _saveError ?? _loadError;
+  String? get lastError =>
+      _permanentError ??
+      _saveError ??
+      _pending.values.map((entry) => entry.lastError).nonNulls.firstOrNull ??
+      _loadError;
 
   @override
   Future<void> save(WorkoutSession session) {
@@ -147,7 +151,8 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
     }
     final entry = _pending.putIfAbsent(session.id!, () {
       _unpersisted.add(session.id!);
-      return PendingWorkout(workoutToRow(session, userId));
+      final row = boundedWorkoutRow(workoutToRow(session, userId));
+      return PendingWorkout(row, lastError: workoutSyncError(row));
     });
     // Begin persisting immediately, even if the provider is disposed while the
     // write is in flight. No request may precede this durable enqueue.
@@ -172,6 +177,25 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
     return _retry ??= _flushPending().whenComplete(() => _retry = null);
   }
 
+  /// A fresh profile read confirmed health consent, so lift only consent pauses.
+  Future<void> resumeConsentPaused() async {
+    await _retry;
+    if (_disposed) return;
+    try {
+      for (final entry in await _queue.load()) {
+        if (_disposed) return;
+        if (!entry.paused) continue;
+        final resumed = PendingWorkout(entry.row);
+        if (await _queue.postpone(resumed)) _pending[entry.id] = resumed;
+      }
+    } catch (_) {
+      _saveError = 'Pending workouts could not be loaded. Please retry.';
+      _notify();
+      return;
+    }
+    await retryPending();
+  }
+
   Future<void> _flushPending() async {
     try {
       if (!_restored) {
@@ -179,7 +203,12 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
         if (_disposed) return;
         for (final entry in restored) {
           if (_pending.containsKey(entry.id)) continue;
-          _pending[entry.id] = entry;
+          // A repository is created only with current health consent. Resume
+          // consent-paused rows, while preserving normal/auth retry backoff.
+          final resumed = entry.paused ? PendingWorkout(entry.row) : entry;
+          if (entry.paused) await _queue.postpone(resumed);
+          if (_disposed) return;
+          _pending[entry.id] = resumed;
           _cache(workoutFromRow(entry.row));
         }
         _restored = true;
@@ -209,10 +238,19 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
         }
         _pending[id] = entry;
         if (_disposed) return;
+        final row = boundedWorkoutRow(entry.row);
+        final validationError = workoutSyncError(row);
+        if (validationError != null) {
+          final local = PendingWorkout(row, lastError: validationError);
+          await _queue.postpone(local);
+          _pending[id] = local;
+          continue;
+        }
         if (entry.retryAfter?.isAfter(_clock()) ?? false) continue;
         final deferred = PendingWorkout(
-          entry.row,
+          row,
           retryAfter: _clock().add(const Duration(minutes: 1)),
+          lastError: entry.lastError,
         );
         // Persist backoff before sending so recreation during an insert also
         // respects the retry interval. Supabase's own short retries are off.
@@ -246,7 +284,27 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
         _pending.remove(id);
         if (permanentError != null) _permanentError = permanentError;
       } else {
-        _saveError = 'Workouts could not sync. They will retry automatically.';
+        final paused = failure is PostgrestException && failure.code == '42501';
+        final error = paused
+            ? 'Workouts are waiting: health data consent is off.'
+            : _isAuthError(failure)
+            ? 'Sign in again to sync workouts.'
+            : 'Workouts could not sync. They will retry automatically.';
+        final deferred = PendingWorkout(
+          _pending[id]!.row,
+          retryAfter: _clock().add(
+            paused ? const Duration(hours: 6) : const Duration(minutes: 1),
+          ),
+          paused: paused,
+          lastError: error,
+        );
+        try {
+          // An auth/consent failure never acknowledges or removes the row.
+          if (await _queue.postpone(deferred)) _pending[id] = deferred;
+        } catch (_) {
+          _saveError =
+              'Workouts could not be stored on this device. Please retry.';
+        }
       }
     }
     if (_pending.isEmpty) _saveError = null;
@@ -256,12 +314,20 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
   bool _isDuplicate(Object error) =>
       error is PostgrestException && error.code == '23505';
 
+  bool _isAuthError(Object error) =>
+      error is AuthException ||
+      error is PostgrestException &&
+          const {
+            '401',
+            '403',
+            'PGRST301',
+            'PGRST302',
+            'PGRST303',
+          }.contains(error.code);
+
   String? _permanentSaveError(Object? error) {
     if (error is PostgrestException) {
       return switch (error.code) {
-        '42501' => 'Workout not saved: health data consent is off.',
-        '401' || '403' || 'PGRST301' || 'PGRST302' || 'PGRST303' =>
-          'Workout not saved: permission denied. Check sign-in and health data consent.',
         '23514' =>
           'Workout not saved: workout values are outside allowed limits.',
         _ => null,
