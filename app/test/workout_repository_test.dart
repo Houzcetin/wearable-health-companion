@@ -315,13 +315,12 @@ void main() {
 
   for (final code in ['23514']) {
     test(
-      'permanent $code drops the row and preserves a clear lastError',
+      'permanent $code reports rejection until the next empty flush',
       () async {
         store.insertError = PostgrestException(message: 'rejected', code: code);
         await repository.save(finishedWorkout());
         expect(repository.lastError, startsWith('Workout not saved:'));
         expect(repository.lastError, contains('allowed limits'));
-        final error = repository.lastError;
         expect(
           (await SharedPreferences.getInstance()).containsKey(
             'workouts.pending.v1.user-a',
@@ -330,11 +329,73 @@ void main() {
         );
         now = now.add(const Duration(minutes: 2));
         await repository.retryPending();
+        expect(repository.lastError, isNull);
         await repository.loadRange(from, to);
         expect(store.inserts, hasLength(1));
-        expect(repository.lastError, error);
+        expect(repository.lastError, isNull);
       },
     );
+  }
+
+  for (final duplicate in [false, true]) {
+    test(
+      'a successful save clears an older permanent error ($duplicate)',
+      () async {
+        store.insertError = const PostgrestException(
+          message: 'rejected',
+          code: '23514',
+        );
+        await repository.save(finishedWorkout());
+        expect(repository.lastError, contains('allowed limits'));
+        store.insertError = duplicate
+            ? const PostgrestException(message: 'duplicate', code: '23505')
+            : null;
+        final next = finishedWorkout();
+        await repository.save(next);
+        expect(store.inserts.last['id'], next.id);
+        expect(
+          await PendingWorkoutQueue('user-a', clock: () => now).load(),
+          isEmpty,
+        );
+        expect(repository.lastError, isNull);
+      },
+    );
+  }
+
+  test('a permanent error cannot mask a later transient sync error', () async {
+    store.insertError = const PostgrestException(
+      message: 'rejected',
+      code: '23514',
+    );
+    await repository.save(finishedWorkout());
+    expect(repository.lastError, contains('allowed limits'));
+    store.insertError = StateError('offline');
+    await repository.save(finishedWorkout());
+    expect(repository.lastError, contains('retry automatically'));
+    now = now.add(const Duration(minutes: 1));
+    store.insertError = null;
+    await repository.retryPending();
+    expect(repository.lastError, isNull);
+  });
+
+  for (final removal in ['remove', 'clear', 'expire']) {
+    test('a queued validation error clears after $removal', () async {
+      final invalid = finishedWorkout(duration: Duration.zero);
+      await repository.save(invalid);
+      expect(repository.lastError, contains('end time'));
+      final queue = PendingWorkoutQueue('user-a', clock: () => now);
+      if (removal == 'remove') {
+        await queue.remove(invalid.id!);
+      } else if (removal == 'clear') {
+        await queue.clear();
+      } else {
+        now = now.add(const Duration(days: 31));
+      }
+      await repository.retryPending();
+      expect(await queue.load(), isEmpty);
+      expect(repository.lastError, isNull);
+      expect(store.inserts, isEmpty);
+    });
   }
 
   for (final code in ['401', '403', 'PGRST301', 'PGRST302', 'PGRST303']) {

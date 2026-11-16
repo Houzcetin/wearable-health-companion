@@ -44,18 +44,25 @@ class PendingWorkoutQueue {
   final DateTime Function() _clock;
   final int _generation;
   String get _key => 'workouts.pending.v1.$userId';
-  static Future<void> _operations = Future.value();
+  static Future<void>? _operations;
   static final Map<String, int> _generations = {};
   bool get _cleared => _generation != (_generations[userId] ?? 0);
 
   Future<T> _serialized<T>(Future<T> Function(SharedPreferences) action) {
-    final result = _operations.then(
+    final result = (_operations ?? Future<void>.value()).then(
       (_) async => action(await SharedPreferences.getInstance()),
     );
-    _operations = result.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
+    // Keep only in-flight work, releasing the completed future and its zone.
+    late final Future<void> operation;
+    void release() {
+      if (identical(_operations, operation)) _operations = null;
+    }
+
+    operation = result.then<void>(
+      (_) => release(),
+      onError: (Object _, StackTrace _) => release(),
     );
+    _operations = operation;
     return result;
   }
 

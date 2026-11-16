@@ -67,7 +67,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _error = null;
     });
     try {
+      final userId = ref.read(currentUserProvider)?.id;
       await ref.read(healthRepositoryProvider).deleteData(account: account);
+      if (userId != null) await clearLocalWorkoutData(userId);
       if (!mounted) return;
       if (account) {
         // The server has removed the account; clear this device's session.

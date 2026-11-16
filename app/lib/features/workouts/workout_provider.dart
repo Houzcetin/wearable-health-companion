@@ -69,13 +69,19 @@ final workoutStoreProvider = Provider<WorkoutStore?>((ref) {
     return null;
   }
 });
+
+/// Explicit deletion must clear pending rows even when consent is already off.
+/// This also invalidates old queue handles and removes corrupt-data backups.
+Future<void> clearLocalWorkoutData(String userId) =>
+    PendingWorkoutQueue(userId).clear();
+
 // Kept separate from the repository so these listeners survive auth/consent
 // rebuilds, including the transition to an in-memory repository.
 final workoutQueuePrivacyProvider = Provider<void>((ref) {
   final consentByUser = <String, bool>{};
   void clear(String userId) {
     unawaited(
-      PendingWorkoutQueue(userId).clear().catchError((Object _) {
+      clearLocalWorkoutData(userId).catchError((Object _) {
         FlutterError.reportError(
           FlutterErrorDetails(
             exception: 'Pending workouts could not be cleared.',

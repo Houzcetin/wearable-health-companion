@@ -1,5 +1,11 @@
 # Workout prompts away from the app
 
+Signed-in workouts awaiting sync are stored in a separate pending queue for each
+account. The queue is capped at 200 rows and 30 days, measured from each workout's
+start time. Rows older than 30 days and the oldest rows above the 200-row cap are
+silently dropped on queue reads and writes, even if they have never synced. No
+warning is shown, and dropped rows will no longer retry.
+
 Live detection still needs the Flutter engine and sensor streams to be running.
 The feature's `AppLifecycleListener` routes unresolved prompts to local
 notifications whenever the app is not resumed, and to the existing sheets when
