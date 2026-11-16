@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// A horizontal track showing the usual range (a tinted band), the usual
-/// value (a tick) and today's value (a dot). Decorative: callers describe the
+/// A horizontal track showing the usual range (a tinted band), the typical
+/// value (a tick, the 28-day median) and today's value (a dot). Decorative: callers describe the
 /// same numbers in text, so the bar is excluded from semantics.
 class UsualRangeBar extends StatelessWidget {
   const UsualRangeBar({
@@ -14,6 +14,7 @@ class UsualRangeBar extends StatelessWidget {
     required this.high,
     required this.color,
   });
+  /// [usual] is the typical value (median); [low]–[high] the usual range.
   final double value, usual, low, high;
   final Color color;
 

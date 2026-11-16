@@ -44,7 +44,7 @@ void main() {
     tester,
   ) async {
     await showToday(tester, FakeHealthRepository(rows: history()));
-    expect(find.text('You slept 52 min less than your usual.'), findsOneWidget);
+    expect(find.text('You slept 52 min less than typical.'), findsOneWidget);
     expect(find.text('6 h 38 min'), findsOneWidget);
     expect(find.text('64 bpm'), findsOneWidget);
     expect(find.text('9,000 steps'), findsOneWidget);
@@ -136,9 +136,100 @@ void main() {
       ),
     ];
     await showToday(tester, FakeHealthRepository(rows: rows));
-    expect(find.text('You slept 53 min less than your usual.'), findsOneWidget);
-    expect(find.text('1,000 steps above usual'), findsOneWidget);
+    expect(find.text('You slept 53 min less than typical.'), findsOneWidget);
+    expect(find.text('Above your usual range (+1,000 steps)'), findsOneWidget);
     expect(find.textContaining('.5'), findsNothing);
+  });
+
+  // Sleep spread wide enough that the usual range (412–488 min) is wider
+  // than typical ± 15 min; heart rate and steps are flat.
+  List<DailyMetrics> spread({
+    required int sleepToday,
+    double heartToday = 60,
+    int stepsToday = 8000,
+  }) => [
+    for (final (i, sleep) in [400, 420, 440, 460, 480, 500, 450].indexed)
+      DailyMetrics(
+        date: testToday.subtract(Duration(days: i + 1)),
+        sleepMinutes: sleep,
+        restingHr: 60,
+        steps: 8000,
+      ),
+    DailyMetrics(
+      date: testToday,
+      sleepMinutes: sleepToday,
+      restingHr: heartToday,
+      steps: stepsToday,
+    ),
+  ];
+  testWidgets('steady but off typical: in range, with the gap and no arrow', (
+    tester,
+  ) async {
+    await showToday(
+      tester,
+      FakeHealthRepository(rows: spread(sleepToday: 425)),
+    );
+    expect(
+      find.text('Your sleep was within your usual range.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('In your usual range (25 min under typical)'),
+      findsOneWidget,
+    );
+    expect(find.text('In your usual range'), findsNWidgets(2));
+    expect(
+      find.text('Heart rate and steps are within your usual range.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.arrow_downward), findsNothing);
+    expect(find.byIcon(Icons.arrow_upward), findsNothing);
+  });
+  testWidgets('changed: outside the range with signed gap and arrow', (
+    tester,
+  ) async {
+    await showToday(tester, FakeHealthRepository(rows: history()));
+    expect(find.text('Below your usual range (−52 min)'), findsOneWidget);
+    expect(find.text('Above your usual range (+4 bpm)'), findsOneWidget);
+    expect(find.text('Above your usual range (+1,000 steps)'), findsOneWidget);
+    expect(
+      find.text('Heart rate and steps also differ from usual.'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.arrow_downward), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_upward), findsNWidgets(2));
+  });
+  testWidgets('others line drops "also" when sleep is steady', (tester) async {
+    await showToday(
+      tester,
+      FakeHealthRepository(
+        rows: spread(sleepToday: 450, heartToday: 64, stepsToday: 9000),
+      ),
+    );
+    expect(
+      find.text('Your sleep was within your usual range.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Heart rate and steps differ from usual.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('also'), findsNothing);
+  });
+  testWidgets('small screen with large text does not overflow', (tester) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await showToday(
+      tester,
+      FakeHealthRepository(rows: spread(sleepToday: 425, stepsToday: 12345)),
+    );
+    expect(tester.takeException(), isNull);
+    await showToday(tester, FakeHealthRepository(rows: history()));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('demo data shows before Google Health is connected', (
@@ -260,18 +351,44 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final metric in {'Sleep': 'sleep', 'Heart': 'heart', 'Activity': 'steps'}.entries) {
+  for (final metric in {
+    'Sleep': 'sleep',
+    'Heart': 'heart',
+    'Activity': 'steps',
+  }.entries) {
     testWidgets('tapping ${metric.key} opens its Week trend', (tester) async {
       final container = await startStage5(tester);
       await tester.tap(find.text(metric.key));
       await tester.pumpAndSettle();
-      final uri = container.read(routerProvider).routeInformationProvider.value.uri;
+      final uri = container
+          .read(routerProvider)
+          .routeInformationProvider
+          .value
+          .uri;
       expect(uri.toString(), '/trends?metric=${metric.value}');
-      expect(tester.widget<ChoiceChip>(find.widgetWithText(
-        ChoiceChip, metric.value == 'heart' ? 'Resting heart rate' :
-          metric.value == 'steps' ? 'Steps' : 'Sleep')).selected, isTrue);
-      expect(tester.widget<SegmentedButton<TrendRange>>(
-        find.byType(SegmentedButton<TrendRange>)).selected, {TrendRange.week});
+      expect(
+        tester
+            .widget<ChoiceChip>(
+              find.widgetWithText(
+                ChoiceChip,
+                metric.value == 'heart'
+                    ? 'Resting heart rate'
+                    : metric.value == 'steps'
+                    ? 'Steps'
+                    : 'Sleep',
+              ),
+            )
+            .selected,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<SegmentedButton<TrendRange>>(
+              find.byType(SegmentedButton<TrendRange>),
+            )
+            .selected,
+        {TrendRange.week},
+      );
     });
   }
 }

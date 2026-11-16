@@ -159,7 +159,8 @@ class _TrendsScreenState extends ConsumerState<TrendsScreen> {
       if (outside.isNotEmpty) ...[
         const SizedBox(height: AppSpace.xl),
         SectionHeader(_metric == TrendMetric.sleep
-            ? 'Nights outside your usual' : 'Days outside your usual'),
+            ? 'Nights outside your usual range'
+            : 'Days outside your usual range'),
         AppCard(
           padding: const EdgeInsets.symmetric(horizontal: AppSpace.l, vertical: AppSpace.xs),
           child: Column(children: [
