@@ -14,7 +14,7 @@ class MetricComparison {
   });
   final double? today, usual, delta;
 
-  /// The usual range: the 25th–75th percentile of the previous 28 days, never
+  /// The usual range: the 10th–90th percentile of the previous 28 days, never
   /// narrower than the usual plus or minus the steady threshold. A value inside
   /// it (inclusive) is steady, outside it changed. Null while the usual is
   /// still being learned (fewer than seven days).
@@ -66,10 +66,10 @@ UsualSummary calculateUsual(List<DailyMetrics> rows, DateTime today) {
     final band = median == null ? null : threshold(median);
     final low = median == null
         ? null
-        : _min(percentile(values, 0.25), median - band!);
+        : _min(percentile(values, 0.1), median - band!);
     final high = median == null
         ? null
-        : _max(percentile(values, 0.75), median + band!);
+        : _max(percentile(values, 0.9), median + band!);
     return MetricComparison(
       today: value?.toDouble(),
       usual: median,

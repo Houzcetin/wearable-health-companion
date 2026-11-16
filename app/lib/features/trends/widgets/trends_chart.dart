@@ -189,13 +189,13 @@ class _TrendsChartState extends State<TrendsChart> {
                   swatch: SizedBox(width: 16, child: CustomPaint(
                     size: const Size(16, 1),
                     painter: _DashPainter(scheme.onSurfaceVariant))),
-                  label: 'Usual ${metric.valueLabel(usual)}',
+                  label: 'Typical ${metric.valueLabel(usual)}',
                 ),
               if (hasRange)
                 _LegendItem(
                   swatch: Container(width: 10, height: 10, decoration: BoxDecoration(
                     color: color, borderRadius: BorderRadius.circular(3))),
-                  label: 'Outside usual',
+                  label: 'Outside usual range',
                 ),
               if (data.missingDays > 0)
                 const _LegendItem(swatch: Text('−'), label: 'No data'),

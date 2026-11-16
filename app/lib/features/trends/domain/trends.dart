@@ -86,7 +86,7 @@ class TrendsData {
   MetricComparison get _baseline => metric.comparison(calculateUsual(rows, end));
   double? get usual => _baseline.usual;
 
-  /// Usual range (25th–75th percentile of the 28 days before [end], never
+  /// Usual range (10th–90th percentile of the 28 days before [end], never
   /// narrower than usual ± the steady threshold).
   double? get usualLow => _baseline.low;
   double? get usualHigh => _baseline.high;
@@ -126,8 +126,8 @@ class TrendsData {
       } else {
         final delta = mean - baseline;
         sentence += delta.abs() < (metric == TrendMetric.heart ? 0.05 : 0.5)
-            ? ', matching your usual.'
-            : ', ${metric.differenceLabel(delta)} ${delta < 0 ? 'below' : 'above'} your usual.';
+            ? ', matching typical.'
+            : ', ${metric.differenceLabel(delta)} ${delta < 0 ? 'below' : 'above'} typical.';
       }
     }
     if (missingDays > 0) {

@@ -381,14 +381,17 @@ String? _othersLine(UsualSummary summary) {
   final steps = summary.steps.status;
   bool known(UsualStatus s) => s == UsualStatus.steady || s == UsualStatus.changed;
   if (!known(heart) || !known(steps)) return null;
+  // "also" only follows a lead sentence that itself reports a change.
+  final also = summary.sleep.status == UsualStatus.changed ? 'also ' : '';
   return switch ((heart, steps)) {
     (UsualStatus.steady, UsualStatus.steady) =>
-      'Heart rate and steps are close to your usual.',
+      'Heart rate and steps are within your usual range.',
     (UsualStatus.changed, UsualStatus.changed) =>
-      'Heart rate and steps also differ from usual.',
+      'Heart rate and steps ${also}differ from usual.',
     (UsualStatus.changed, _) =>
-      'Heart rate differs from usual; steps are close.',
-    _ => 'Steps differ from usual; heart rate is close.',
+      'Heart rate ${also}differs from usual; steps are within your usual range.',
+    _ =>
+      'Steps ${also}differ from usual; heart rate is within your usual range.',
   };
 }
 
@@ -412,7 +415,7 @@ class _SleepInsight extends StatelessWidget {
           text: '${_delta(sleep.delta!)} min $direction',
           style: TextStyle(color: theme.colorScheme.primary),
         ),
-        const TextSpan(text: ' than your usual.'),
+        const TextSpan(text: ' than typical.'),
       ]),
       style: style,
     );
@@ -432,9 +435,9 @@ String _sleepInsight(MetricComparison sleep) => switch (sleep.status) {
   UsualStatus.noData => 'No sleep data for last night.',
   UsualStatus.learning =>
     'Still learning your usual (${sleep.sampleDays} of 7 nights).',
-  UsualStatus.steady => 'Your sleep matched your usual.',
+  UsualStatus.steady => 'Your sleep was within your usual range.',
   UsualStatus.changed =>
-    'You slept ${_delta(sleep.delta!)} min ${sleep.delta! < 0 ? 'less' : 'more'} than your usual.',
+    'You slept ${_delta(sleep.delta!)} min ${sleep.delta! < 0 ? 'less' : 'more'} than typical.',
 };
 String _comparison(
   MetricComparison metric,
@@ -443,10 +446,13 @@ String _comparison(
   UsualStatus.noData => 'No data today',
   UsualStatus.learning =>
     'Learning your usual (${metric.sampleDays} of 7 days)',
-  UsualStatus.changed || UsualStatus.steady =>
-    metric.delta!.abs().round() == 0
-        ? 'Same as your usual'
-        : '${_delta(metric.delta!)} $unit ${metric.delta! < 0 ? 'below' : 'above'} usual',
+  UsualStatus.steady => metric.delta!.round() == 0
+      ? 'In your usual range'
+      : 'In your usual range (${_delta(metric.delta!)} $unit '
+            '${metric.delta! < 0 ? 'under' : 'over'} typical)',
+  UsualStatus.changed => metric.delta! < 0
+      ? 'Below your usual range (−${_delta(metric.delta!)} $unit)'
+      : 'Above your usual range (+${_delta(metric.delta!)} $unit)',
 };
 String _lastSynced(DateTime? timestamp) => timestamp == null
     ? 'Last synced: never'
@@ -477,6 +483,8 @@ class _MetricCard extends StatelessWidget {
     final muted = theme.colorScheme.onSurfaceVariant;
     final m = metric;
     final delta = m?.delta;
+    // Only a value outside the usual range gets a direction arrow.
+    final arrow = m?.status == UsualStatus.changed && delta != null;
     final showRange = m != null && m.today != null && m.usual != null &&
         m.low != null && m.high != null;
     return AppCard(
@@ -489,8 +497,18 @@ class _MetricCard extends StatelessWidget {
             children: [
               MetricIcon(icon: icon, color: color, tint: tint),
               const SizedBox(width: AppSpace.m),
-              Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
-              Text(value, style: theme.textTheme.titleLarge),
+              Expanded(
+                flex: 2,
+                child: Text(title, style: theme.textTheme.titleSmall,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: AppSpace.s),
+              Flexible(
+                flex: 3,
+                child: Text(value, style: theme.textTheme.titleLarge,
+                  textAlign: TextAlign.end, maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
           if (showRange) ...[
@@ -503,7 +521,7 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              if (delta != null && delta.round() != 0) ...[
+              if (arrow) ...[
                 Icon(
                   delta < 0 ? Icons.arrow_downward : Icons.arrow_upward,
                   size: 14,
