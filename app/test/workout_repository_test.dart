@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:wearable_companion/features/workouts/data/pending_workout_queue.dart';
 import 'package:wearable_companion/features/workouts/data/workout_repository.dart';
 import 'package:wearable_companion/features/workouts/data/workout_row.dart';
 
@@ -9,11 +12,18 @@ import 'support/workout_fakes.dart';
 void main() {
   late FakeWorkoutStore store;
   late SupabaseWorkoutRepository repository;
+  late DateTime now;
   final from = DateTime(2026, 11, 16);
   final to = DateTime(2026, 11, 17);
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    now = from;
     store = FakeWorkoutStore();
-    repository = SupabaseWorkoutRepository(store: store, userId: 'user-a');
+    repository = SupabaseWorkoutRepository(
+      store: store,
+      userId: 'user-a',
+      clock: () => now,
+    );
   });
   tearDown(() => repository.dispose());
 
@@ -45,6 +55,7 @@ void main() {
       expect(repository.sessions.single, session);
       expect(store.inserts, hasLength(1));
       store.failInserts = false;
+      now = now.add(const Duration(minutes: 1));
       await repository.retryPending();
       await repository.retryPending();
       expect(store.inserts, hasLength(2));
@@ -56,11 +67,12 @@ void main() {
     },
   );
 
-  test('save retries older pending workouts too', () async {
+  test('save retries older pending workouts once backoff expires', () async {
     store.failInserts = true;
     final first = finishedWorkout();
     await repository.save(first);
     store.failInserts = false;
+    now = now.add(const Duration(minutes: 1));
     final second = finishedWorkout();
     await repository.save(second);
     expect(store.inserts.map((row) => row['id']), [
@@ -79,6 +91,7 @@ void main() {
       final first = repository.save(finishedWorkout());
       final second = repository.save(finishedWorkout());
       final retry = repository.retryPending();
+      await Future<void>.delayed(Duration.zero);
       expect(store.inserts, hasLength(1));
       store.insertGate!.complete();
       await Future.wait([first, second, retry]);
@@ -106,6 +119,7 @@ void main() {
         workoutToRow(finishedWorkout(), 'user-b'),
       ];
       store.failInserts = false;
+      now = now.add(const Duration(minutes: 1));
       final changed = repository.changes.first;
       await repository.loadRange(from, to);
       await changed;
@@ -145,7 +159,7 @@ void main() {
       expect(repository.sessions.single.steps, 1000);
       expect(repository.lastError, isNotNull);
       expect(repository.loadError, isNull);
-      expect(store.inserts, hasLength(2));
+      expect(store.inserts, hasLength(1));
     },
   );
 
@@ -165,6 +179,436 @@ void main() {
       expect(repository.sessions, isEmpty);
       await repository.save(finishedWorkout());
       expect(store.inserts, isEmpty);
+    },
+  );
+
+  test(
+    'pending rows survive restart and restore their retry backoff',
+    () async {
+      store.failInserts = true;
+      final session = finishedWorkout();
+      await repository.save(session);
+      final preferences = await SharedPreferences.getInstance();
+      final persisted = {
+        for (final key in preferences.getKeys()) key: preferences.get(key)!,
+      };
+      expect(persisted['workouts.pending.v1.user-a'], contains(session.id!));
+      repository.dispose();
+      // Reinitialize the preferences cache as a fresh app process would.
+      SharedPreferences.setMockInitialValues(persisted);
+      store = FakeWorkoutStore();
+      repository = SupabaseWorkoutRepository(
+        store: store,
+        userId: 'user-a',
+        clock: () => now,
+      );
+      await repository.retryPending();
+      expect(repository.sessions.single.id, session.id);
+      expect(store.inserts, isEmpty);
+      now = now.add(const Duration(seconds: 59));
+      await repository.retryPending();
+      expect(store.inserts, isEmpty);
+      now = now.add(const Duration(seconds: 1));
+      await repository.retryPending();
+      expect(store.inserts.single, workoutToRow(session, 'user-a'));
+      expect(
+        (await SharedPreferences.getInstance()).containsKey(
+          'workouts.pending.v1.user-a',
+        ),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'a save persists even when disposed before its enqueue completes',
+    () async {
+      final session = finishedWorkout();
+      final save = repository.save(session);
+      repository.dispose();
+      await save;
+      expect(store.inserts, isEmpty);
+      expect(
+        (await SharedPreferences.getInstance()).getString(
+          'workouts.pending.v1.user-a',
+        ),
+        contains(session.id!),
+      );
+      repository = SupabaseWorkoutRepository(
+        store: store,
+        userId: 'user-a',
+        clock: () => now,
+      );
+      await repository.retryPending();
+      expect(store.rows.single['id'], session.id);
+    },
+  );
+
+  test(
+    'an insert is durable before sending and acknowledged after disposal',
+    () async {
+      store.insertGate = Completer<void>();
+      final session = finishedWorkout();
+      final save = repository.save(session);
+      await Future<void>.delayed(Duration.zero);
+      expect(store.inserts, hasLength(1));
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getString('workouts.pending.v1.user-a'),
+        contains(session.id!),
+      );
+      repository.dispose();
+      store.insertGate!.complete();
+      await save;
+      expect(preferences.containsKey('workouts.pending.v1.user-a'), isFalse);
+    },
+  );
+
+  test(
+    'switching accounts retains and only retries each account own rows',
+    () async {
+      store.failInserts = true;
+      final workoutA = finishedWorkout();
+      await repository.save(workoutA);
+      repository.dispose();
+      final storeB = FakeWorkoutStore()..failInserts = true;
+      repository = SupabaseWorkoutRepository(
+        store: storeB,
+        userId: 'user-b',
+        clock: () => now,
+      );
+      await repository.retryPending();
+      expect(repository.sessions, isEmpty);
+      expect(storeB.inserts, isEmpty);
+      final workoutB = finishedWorkout();
+      await repository.save(workoutB);
+      expect(storeB.inserts.single['user_id'], 'user-b');
+      repository.dispose();
+      now = now.add(const Duration(minutes: 1));
+      store.failInserts = false;
+      repository = SupabaseWorkoutRepository(
+        store: store,
+        userId: 'user-a',
+        clock: () => now,
+      );
+      await repository.retryPending();
+      expect(store.rows.single['id'], workoutA.id);
+      expect(repository.sessions.single.id, workoutA.id);
+      final preferences = await SharedPreferences.getInstance();
+      expect(preferences.containsKey('workouts.pending.v1.user-a'), isFalse);
+      expect(
+        preferences.getString('workouts.pending.v1.user-b'),
+        contains(workoutB.id!),
+      );
+      repository.dispose();
+      storeB.failInserts = false;
+      repository = SupabaseWorkoutRepository(
+        store: storeB,
+        userId: 'user-b',
+        clock: () => now,
+      );
+      await repository.retryPending();
+      expect(storeB.rows.single['id'], workoutB.id);
+      expect(storeB.inserts.every((row) => row['user_id'] == 'user-b'), isTrue);
+    },
+  );
+
+  for (final code in ['23514']) {
+    test(
+      'permanent $code drops the row and preserves a clear lastError',
+      () async {
+        store.insertError = PostgrestException(message: 'rejected', code: code);
+        await repository.save(finishedWorkout());
+        expect(repository.lastError, startsWith('Workout not saved:'));
+        expect(repository.lastError, contains('allowed limits'));
+        final error = repository.lastError;
+        expect(
+          (await SharedPreferences.getInstance()).containsKey(
+            'workouts.pending.v1.user-a',
+          ),
+          isFalse,
+        );
+        now = now.add(const Duration(minutes: 2));
+        await repository.retryPending();
+        await repository.loadRange(from, to);
+        expect(store.inserts, hasLength(1));
+        expect(repository.lastError, error);
+      },
+    );
+  }
+
+  for (final code in ['401', '403', 'PGRST301', 'PGRST302', 'PGRST303']) {
+    test(
+      'auth $code keeps its row and error across restart with backoff',
+      () async {
+        store.insertError = PostgrestException(
+          message: 'JWT rejected',
+          code: code,
+        );
+        final session = finishedWorkout();
+        await repository.save(session);
+        expect(repository.lastError, 'Sign in again to sync workouts.');
+        final queue = PendingWorkoutQueue('user-a', clock: () => now);
+        final pending = (await queue.load()).single;
+        expect(pending.id, session.id);
+        expect(pending.retryAfter, now.add(const Duration(minutes: 1)).toUtc());
+        expect(pending.paused, isFalse);
+        repository.dispose();
+        repository = SupabaseWorkoutRepository(
+          store: store,
+          userId: 'user-a',
+          clock: () => now,
+        );
+        await repository.retryPending();
+        await repository.loadRange(from, to);
+        expect(repository.lastError, 'Sign in again to sync workouts.');
+        expect(store.inserts, hasLength(1));
+        now = now.add(const Duration(seconds: 59));
+        await repository.retryPending();
+        expect(store.inserts, hasLength(1));
+        now = now.add(const Duration(seconds: 1));
+        store.insertError = null;
+        await repository.retryPending();
+        expect(store.inserts.map((row) => row['id']), [session.id, session.id]);
+        expect(await queue.load(), isEmpty);
+        expect(repository.lastError, isNull);
+      },
+    );
+  }
+
+  for (final resume in ['timeout', 'recreation', 'consent']) {
+    test('42501 pauses durably for six hours, resumes on $resume', () async {
+      store.insertError = const PostgrestException(
+        message: 'RLS',
+        code: '42501',
+      );
+      final session = finishedWorkout();
+      await repository.save(session);
+      expect(
+        repository.lastError,
+        'Workouts are waiting: health data consent is off.',
+      );
+      final queue = PendingWorkoutQueue('user-a', clock: () => now);
+      final pending = (await queue.load()).single;
+      expect(pending.id, session.id);
+      expect(pending.paused, isTrue);
+      expect(pending.retryAfter, now.add(const Duration(hours: 6)).toUtc());
+      now = now.add(const Duration(hours: 5, minutes: 59));
+      await repository.retryPending();
+      await repository.loadRange(from, to);
+      expect(store.inserts, hasLength(1));
+      expect(repository.lastError, pending.lastError);
+      store.insertError = null;
+      if (resume == 'recreation') {
+        repository.dispose();
+        repository = SupabaseWorkoutRepository(
+          store: store,
+          userId: 'user-a',
+          clock: () => now,
+        );
+      } else if (resume == 'consent') {
+        await repository.resumeConsentPaused();
+      } else {
+        now = now.add(const Duration(minutes: 1));
+      }
+      await repository.retryPending();
+      expect(store.rows.single['id'], session.id);
+      expect(await queue.load(), isEmpty);
+      expect(repository.lastError, isNull);
+    });
+  }
+
+  test('finite measurements and duration are clamped before upload', () async {
+    final session = finishedWorkout(
+      steps: 500001,
+      distance: 1000001,
+      calories: 50001,
+      duration: const Duration(hours: 25),
+      weightKg: 401,
+    );
+    await repository.save(session);
+    final row = store.inserts.single;
+    expect(row['steps'], 500000);
+    expect(row['distance_m'], 1000000);
+    expect(row['calories'], 50000);
+    expect(row['weight_kg'], 400);
+    expect(
+      DateTime.parse(row['ended_at'] as String).difference(session.startedAt),
+      const Duration(hours: 24),
+    );
+    expect(repository.lastError, isNull);
+    await repository.save(
+      finishedWorkout(steps: -1, distance: -2, calories: -3, weightKg: 19),
+    );
+    expect(store.inserts.last['steps'], 0);
+    expect(store.inserts.last['distance_m'], 0);
+    expect(store.inserts.last['calories'], 0);
+    expect(store.inserts.last['weight_kg'], 20);
+  });
+
+  test('legacy queued measurements are bounded before retry', () async {
+    await repository.retryPending();
+    repository.dispose();
+    final row = workoutToRow(
+      finishedWorkout(
+        steps: 900000,
+        distance: 2000000,
+        calories: 60000,
+        duration: const Duration(hours: 26),
+      ),
+      'user-a',
+    );
+    await PendingWorkoutQueue(
+      'user-a',
+      clock: () => now,
+    ).add(PendingWorkout(row));
+    repository = SupabaseWorkoutRepository(
+      store: store,
+      userId: 'user-a',
+      clock: () => now,
+    );
+    await repository.retryPending();
+    expect(store.inserts.single['steps'], 500000);
+    expect(store.inserts.single['distance_m'], 1000000);
+    expect(store.inserts.single['calories'], 50000);
+    expect(
+      workoutFromRow(store.inserts.single).duration,
+      const Duration(hours: 24),
+    );
+  });
+
+  for (final (name, session, message) in [
+    ('zero duration', finishedWorkout(duration: Duration.zero), 'end time'),
+    (
+      'negative duration',
+      finishedWorkout(duration: const Duration(seconds: -1)),
+      'end time',
+    ),
+    ('NaN distance', finishedWorkout(distance: double.nan), 'finite numbers'),
+    (
+      'infinite calories',
+      finishedWorkout(calories: double.infinity),
+      'finite numbers',
+    ),
+    (
+      'infinite weight',
+      finishedWorkout(weightKg: double.negativeInfinity),
+      'finite numbers',
+    ),
+  ]) {
+    test(
+      '$name stays durable locally with a clear error and is never sent',
+      () async {
+        await repository.save(session);
+        expect(store.inserts, isEmpty);
+        expect(repository.sessions.single.id, session.id);
+        expect(repository.lastError, contains(message));
+        final queue = PendingWorkoutQueue('user-a', clock: () => now);
+        expect((await queue.load()).single.id, session.id);
+        repository.dispose();
+        repository = SupabaseWorkoutRepository(
+          store: store,
+          userId: 'user-a',
+          clock: () => now,
+        );
+        await repository.retryPending();
+        expect(repository.lastError, contains(message));
+        expect(repository.sessions.single.id, session.id);
+        expect(store.inserts, isEmpty);
+        await repository.save(finishedWorkout());
+        expect(store.inserts, hasLength(1));
+        expect((await queue.load()).single.id, session.id);
+        expect(repository.lastError, contains(message));
+      },
+    );
+  }
+
+  for (final error in [
+    StateError('offline'),
+    const PostgrestException(message: 'unavailable', code: '503'),
+  ]) {
+    test(
+      'transient $error stays durable and throttles retries from all callers',
+      () async {
+        store.insertError = error;
+        final first = finishedWorkout();
+        await repository.save(first);
+        await repository.retryPending();
+        await repository.loadRange(from, to);
+        expect(store.inserts, hasLength(1));
+        await repository.save(finishedWorkout());
+        expect(store.inserts, hasLength(2));
+        expect(store.inserts.last['id'], isNot(first.id));
+        final preferences = await SharedPreferences.getInstance();
+        expect(
+          preferences.getString('workouts.pending.v1.user-a'),
+          contains(first.id!),
+        );
+        expect(repository.lastError, contains('retry automatically'));
+        now = now.add(const Duration(minutes: 1));
+        store.insertError = null;
+        await repository.retryPending();
+        expect(store.rows, hasLength(2));
+        expect(preferences.containsKey('workouts.pending.v1.user-a'), isFalse);
+        expect(repository.lastError, isNull);
+      },
+    );
+  }
+
+  test('duplicate acknowledgement removes the durable row', () async {
+    store.insertError = const PostgrestException(
+      message: 'duplicate id',
+      code: '23505',
+    );
+    await repository.save(finishedWorkout());
+    expect(repository.lastError, isNull);
+    expect(
+      (await SharedPreferences.getInstance()).containsKey(
+        'workouts.pending.v1.user-a',
+      ),
+      isFalse,
+    );
+    now = now.add(const Duration(minutes: 1));
+    await repository.retryPending();
+    expect(store.inserts, hasLength(1));
+  });
+
+  test(
+    'a replacement cannot resurrect a row rejected after disposal',
+    () async {
+      store.insertError = const PostgrestException(
+        message: 'invalid',
+        code: '23514',
+      );
+      store.insertGate = Completer<void>();
+      final rejected = finishedWorkout();
+      final saving = repository.save(rejected);
+      await Future<void>.delayed(Duration.zero);
+      expect(store.inserts, hasLength(1));
+      final oldStore = store;
+      repository.dispose();
+      store = FakeWorkoutStore()..failInserts = true;
+      repository = SupabaseWorkoutRepository(
+        store: store,
+        userId: 'user-a',
+        clock: () => now,
+      );
+      await repository.retryPending();
+      final pending = finishedWorkout();
+      await repository.save(pending);
+      oldStore.insertGate!.complete();
+      await saving;
+      now = now.add(const Duration(minutes: 1));
+      store.failInserts = false;
+      await repository.retryPending();
+      expect(store.inserts.map((row) => row['id']), [pending.id, pending.id]);
+      expect(store.rows.single['id'], pending.id);
+      expect(
+        (await SharedPreferences.getInstance()).containsKey(
+          'workouts.pending.v1.user-a',
+        ),
+        isFalse,
+      );
     },
   );
 }

@@ -8,9 +8,13 @@ WorkoutSession finishedWorkout({
   String? id,
   DateTime? start,
   int steps = 1000,
+  Duration duration = const Duration(minutes: 30),
+  double? distance,
+  double? calories,
+  double weightKg = 70,
 }) {
   final startedAt = start ?? DateTime(2026, 11, 16, 10);
-  final end = startedAt.add(const Duration(minutes: 30));
+  final end = startedAt.add(duration);
   return WorkoutSession(
     id: id,
     type: ExerciseType.walk,
@@ -19,6 +23,9 @@ WorkoutSession finishedWorkout({
     measuredAt: end,
     endedAt: end,
     steps: steps,
+    recordedDistanceMeters: distance,
+    recordedCalories: calories,
+    weightKg: weightKg,
   );
 }
 
@@ -27,6 +34,7 @@ class FakeWorkoutStore implements WorkoutStore {
   final loads = <({String userId, DateTime from, DateTime to})>[];
   List<Map<String, dynamic>> rows = [];
   bool failInserts = false, failLoads = false;
+  Object? insertError;
   Completer<void>? insertGate;
   Future<List<Map<String, dynamic>>> Function(String)? onLoad;
 
@@ -34,6 +42,7 @@ class FakeWorkoutStore implements WorkoutStore {
   Future<void> insertIgnoringDuplicates(Map<String, dynamic> row) async {
     inserts.add(Map.of(row));
     await insertGate?.future;
+    if (insertError != null) throw insertError!;
     if (failInserts) throw StateError('offline');
     if (!rows.any((saved) => saved['id'] == row['id'])) rows.add(Map.of(row));
   }

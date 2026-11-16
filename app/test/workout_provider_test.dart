@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:wearable_companion/data/auth_repository.dart';
 import 'package:wearable_companion/data/profile_repository.dart';
 import 'package:wearable_companion/data/providers.dart';
 import 'package:wearable_companion/features/workouts/data/activity_sources.dart';
+import 'package:wearable_companion/features/workouts/data/pending_workout_queue.dart';
 import 'package:wearable_companion/features/workouts/data/motion_history_source.dart';
 import 'package:wearable_companion/features/workouts/data/workout_repository.dart';
 import 'package:wearable_companion/features/workouts/data/workout_row.dart';
@@ -79,6 +82,7 @@ void main() {
   }
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     now = DateTime(2026, 11, 16, 12);
     store = FakeWorkoutStore();
   });
@@ -329,6 +333,7 @@ void main() {
       await settle();
       expect(store.inserts, hasLength(1));
       store.failInserts = false;
+      now = now.add(const Duration(minutes: 1));
       notifier.tick();
       await settle();
       expect(store.inserts, hasLength(2));
@@ -424,8 +429,192 @@ void main() {
       await settle();
       expect(container.read(workoutRepositoryProvider), same(repository));
       store.failInserts = false;
+      now = now.add(const Duration(minutes: 1));
       await repository.retryPending();
       expect(store.rows, hasLength(1));
+    },
+  );
+
+  test(
+    'confirmed profile consent resumes RLS-paused rows immediately',
+    () async {
+      await setup();
+      final repository = container.read(workoutRepositoryProvider);
+      store.insertError = const PostgrestException(
+        message: 'RLS',
+        code: '42501',
+      );
+      final session = finishedWorkout();
+      await repository.save(session);
+      expect(
+        repository.lastError,
+        'Workouts are waiting: health data consent is off.',
+      );
+      store.insertError = null;
+      container.invalidate(profileProvider);
+      await container.read(profileProvider.future);
+      await settle();
+      await container.read(workoutRepositoryProvider).retryPending();
+      expect(store.rows.single['id'], session.id);
+      expect(repository.lastError, isNull);
+    },
+  );
+
+  test(
+    'already loaded consent off preserves paused rows until consent returns',
+    () async {
+      final queue = PendingWorkoutQueue(testUser.id, clock: () => now);
+      final session = finishedWorkout();
+      await queue.add(
+        PendingWorkout(
+          workoutToRow(session, testUser.id),
+          paused: true,
+          retryAfter: now.add(const Duration(hours: 6)),
+          lastError: 'Workouts are waiting: health data consent is off.',
+        ),
+      );
+      var consented = false;
+      final scope = ProviderContainer(
+        overrides: [
+          backendConfiguredProvider.overrideWithValue(true),
+          currentUserProvider.overrideWithValue(testUser),
+          workoutStoreProvider.overrideWithValue(store),
+          workoutClockProvider.overrideWithValue(() => now),
+          profileProvider.overrideWith(
+            (ref) async => Profile(
+              userId: testUser.id,
+              timezone: 'UTC',
+              healthConsentAt: consented ? now : null,
+            ),
+          ),
+        ],
+      );
+      addTearDown(scope.dispose);
+      await scope.read(profileProvider.future);
+      scope.listen(workoutRepositoryProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+      expect((await queue.load()).single.id, session.id);
+      expect(store.inserts, isEmpty);
+      consented = true;
+      scope.invalidate(profileProvider);
+      await scope.read(profileProvider.future);
+      await scope.pump();
+      await scope.read(workoutRepositoryProvider).retryPending();
+      expect(store.rows.single['id'], session.id);
+      expect(await queue.load(), isEmpty);
+    },
+  );
+
+  for (final action in ['sign out', 'delete health data', 'delete account']) {
+    test(
+      '$action clears the owner queue and backup, retaining other accounts',
+      () async {
+        await setup();
+        store.failInserts = true;
+        await container.read(workoutRepositoryProvider).save(finishedWorkout());
+        final other = PendingWorkoutQueue('user-b', clock: () => now);
+        final otherWorkout = finishedWorkout();
+        await other.add(PendingWorkout(workoutToRow(otherWorkout, 'user-b')));
+        final prefs = await SharedPreferences.getInstance();
+        final key = 'workouts.pending.v1.${testUser.id}';
+        await prefs.setString('$key.corrupt', 'private backup');
+        expect(prefs.containsKey(key), isTrue);
+        if (action == 'delete health data') {
+          // Successful health deletion withdraws consent and refreshes profile.
+          profiles.consented = false;
+          container.invalidate(profileProvider);
+          await container.read(profileProvider.future);
+        } else {
+          // Successful account deletion also signs out through this auth stream.
+          await auth.signOut();
+        }
+        await settle();
+        expect(prefs.containsKey(key), isFalse);
+        expect(prefs.containsKey('$key.corrupt'), isFalse);
+        expect((await other.load()).single.id, otherWorkout.id);
+        expect(container.read(workoutProvider).todaySessions, isEmpty);
+        store.failInserts = false;
+        if (action == 'delete health data') {
+          profiles.consented = true;
+          container.invalidate(profileProvider);
+        } else {
+          auth.emit(testUser);
+          await settle();
+        }
+        await container.read(profileProvider.future);
+        await settle();
+        expect(store.inserts, hasLength(1));
+        expect(store.rows, isEmpty);
+      },
+    );
+  }
+
+  for (final outcome in ['success', 'auth error', 'consent error']) {
+    test(
+      'sign out during an insert cannot resurrect the queue: $outcome',
+      () async {
+        await setup();
+        final repository = container.read(workoutRepositoryProvider);
+        store.insertGate = Completer<void>();
+        if (outcome != 'success') {
+          store.insertError = PostgrestException(
+            message: 'rejected',
+            code: outcome == 'auth error' ? '401' : '42501',
+          );
+        }
+        final save = repository.save(finishedWorkout());
+        await settle();
+        expect(store.inserts, hasLength(1));
+        await auth.signOut();
+        await settle();
+        store.insertGate!.complete();
+        await save;
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.containsKey('workouts.pending.v1.${testUser.id}'),
+          isFalse,
+        );
+      },
+    );
+  }
+
+  test(
+    'account changes retain pending rows until their owner signs back in',
+    () async {
+      await setup();
+      store.failInserts = true;
+      final workoutA = finishedWorkout();
+      await container.read(workoutRepositoryProvider).save(workoutA);
+      auth.emit(const AppUser(id: 'user-b'));
+      await settle();
+      await container.read(profileProvider.future);
+      await settle();
+      expect(container.read(workoutProvider).todaySessions, isEmpty);
+      expect(store.inserts, hasLength(1));
+      final workoutB = finishedWorkout();
+      await container.read(workoutRepositoryProvider).save(workoutB);
+      expect(store.inserts.last['user_id'], 'user-b');
+      now = now.add(const Duration(minutes: 1));
+      store.failInserts = false;
+      auth.emit(testUser);
+      await settle();
+      await container.read(profileProvider.future);
+      await settle();
+      await container.read(workoutRepositoryProvider).retryPending();
+      expect(store.rows.single['id'], workoutA.id);
+      expect(
+        container.read(workoutProvider).todaySessions.single.id,
+        workoutA.id,
+      );
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getString('workouts.pending.v1.user-b'),
+        contains(workoutB.id!),
+      );
+      expect(
+        preferences.containsKey('workouts.pending.v1.${testUser.id}'),
+        isFalse,
+      );
     },
   );
 }

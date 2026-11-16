@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show FlutterError, FlutterErrorDetails, kIsWeb;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers.dart';
 import '../../core/router.dart' show routerProvider;
 import 'data/activity_sources.dart';
+import 'data/pending_workout_queue.dart';
 import 'data/local_workout_notifications.dart';
 import 'data/motion_history_source.dart';
 import 'data/simulated_sources.dart';
@@ -67,7 +69,41 @@ final workoutStoreProvider = Provider<WorkoutStore?>((ref) {
     return null;
   }
 });
+// Kept separate from the repository so these listeners survive auth/consent
+// rebuilds, including the transition to an in-memory repository.
+final workoutQueuePrivacyProvider = Provider<void>((ref) {
+  final consentByUser = <String, bool>{};
+  void clear(String userId) {
+    unawaited(
+      PendingWorkoutQueue(userId).clear().catchError((Object _) {
+        FlutterError.reportError(
+          FlutterErrorDetails(
+            exception: 'Pending workouts could not be cleared.',
+          ),
+        );
+      }),
+    );
+  }
+
+  ref.listen(currentUserProvider.select((user) => user?.id), (previous, next) {
+    if (previous != null && next == null) clear(previous);
+  });
+  ref.listen(profileProvider, (_, next) {
+    final profile = next.asData?.value;
+    final userId = ref.read(currentUserProvider)?.id;
+    if (profile == null || profile.userId != userId) return;
+    final hadConsent = consentByUser[profile.userId];
+    consentByUser[profile.userId] = profile.hasHealthConsent;
+    // An actual withdrawal clears health data. Starting with consent off keeps
+    // RLS-paused rows available for a later grant.
+    if (hadConsent == true && !profile.hasHealthConsent) {
+      clear(profile.userId);
+    }
+  }, fireImmediately: true);
+});
+
 final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
+  ref.watch(workoutQueuePrivacyProvider);
   final configured = ref.watch(backendConfiguredProvider);
   final userId = ref.watch(currentUserProvider.select((user) => user?.id));
   WorkoutStore? store;
@@ -85,8 +121,20 @@ final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
   }
   final WorkoutRepository repository = store == null
       ? InMemoryWorkoutRepository()
-      : SupabaseWorkoutRepository(store: store, userId: userId!);
+      : SupabaseWorkoutRepository(
+          store: store,
+          userId: userId!,
+          clock: ref.read(workoutClockProvider),
+        );
   ref.onDispose(repository.dispose);
+  if (repository is SupabaseWorkoutRepository) {
+    ref.listen(profileProvider, (_, next) {
+      final profile = next.asData?.value;
+      if (profile?.userId == userId && profile?.hasHealthConsent == true) {
+        unawaited(repository.resumeConsentPaused());
+      }
+    });
+  }
   return repository;
 });
 
