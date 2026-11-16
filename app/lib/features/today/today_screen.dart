@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/theme.dart';
+import '../../core/widgets/app_card.dart';
+import '../../core/widgets/connect_prompt.dart';
+import '../../core/widgets/usual_range_bar.dart';
 import '../../data/daily_metrics.dart';
-import '../../data/health_repository.dart';
 import '../../data/providers.dart';
 import '../workouts/ui/workout_today_card.dart';
 import 'domain/usual.dart';
@@ -93,127 +95,167 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   Widget build(BuildContext context) {
     final configured = ref.watch(backendConfiguredProvider);
     final data = ref.watch(todayDataProvider);
+    final connected = configured && data.value?.connection?.isActive == true;
     return Scaffold(
-      appBar: AppBar(title: const Text('Today')),
+      appBar: AppBar(
+        title: const Text('Today'),
+        actions: [
+          if (connected)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpace.s),
+              child: TextButton.icon(
+                onPressed: _syncing ? null : _sync,
+                icon: _syncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.sync),
+                label: Text(_syncing ? 'Syncing…' : 'Sync now'),
+              ),
+            ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          padding: AppSpace.page,
           children: [
             Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 680),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: !configured
-                      ? _offline()
-                      : data.when(
-                          skipLoadingOnRefresh: false,
-                          data: _content,
-                          loading: () => [
-                            const Padding(
-                              padding: EdgeInsets.all(32),
-                              child: Column(
-                                children: [
-                                  CircularProgressIndicator(),
-                                  SizedBox(height: 16),
-                                  Text('Loading your daily summary…'),
-                                ],
+                  children: [
+                    ...!configured
+                        ? _offline()
+                        : data.when(
+                            skipLoadingOnRefresh: false,
+                            data: _content,
+                            loading: _loading,
+                            error: (_, _) => [
+                              const Text(
+                                'Could not load your daily summary. Please try again.',
                               ),
-                            ),
-                          ],
-                          error: (_, _) => [
-                            const Text(
-                              'Could not load your daily summary. Please try again.',
-                            ),
-                            OutlinedButton(
-                              onPressed: _refresh,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
+                              const SizedBox(height: AppSpace.m),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: OutlinedButton(
+                                  onPressed: _refresh,
+                                  child: const Text('Retry'),
+                                ),
+                              ),
+                            ],
+                          ),
+                    const SizedBox(height: AppSpace.xl),
+                    const WorkoutTodayCard(),
+                  ],
                 ),
               ),
             ),
-            const WorkoutTodayCard(),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _offline() => [
-    Text(
-      'Backend not configured',
-      style: Theme.of(context).textTheme.titleLarge,
-    ),
-    const SizedBox(height: 8),
-    const Text(
-      'Your daily summary will appear here when the backend is configured.',
-    ),
-    const SizedBox(height: 12),
-    const _MetricCard(
-      icon: Icons.bedtime_outlined,
-      color: AppColors.sleep,
-      title: 'Sleep',
-      value: '—',
-      comparison: 'No data yet',
-    ),
-    const _MetricCard(
-      icon: Icons.favorite_outline,
-      color: AppColors.heart,
-      title: 'Heart',
-      value: '—',
-      comparison: 'No data yet',
-    ),
-    const _MetricCard(
-      icon: Icons.directions_walk,
-      color: AppColors.activity,
-      title: 'Activity',
-      value: '—',
-      comparison: 'No data yet',
-    ),
-  ];
+  List<Widget> _loading() {
+    final scheme = Theme.of(context).colorScheme;
+    Widget block(double height) => Container(
+      height: height,
+      margin: const EdgeInsets.only(bottom: AppSpace.m),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+    );
+    return [
+      Semantics(
+        liveRegion: true,
+        label: 'Loading your daily summary…',
+        child: ExcludeSemantics(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LinearProgressIndicator(minHeight: 2),
+              const SizedBox(height: AppSpace.l),
+              FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: 0.8,
+                child: block(64),
+              ),
+              const SizedBox(height: AppSpace.s),
+              block(120),
+              block(120),
+              block(120),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  List<Widget> _offline() {
+    final palette = MetricColors.of(context);
+    return [
+      Text(
+        'Backend not configured',
+        style: Theme.of(context).textTheme.headlineSmall,
+      ),
+      const SizedBox(height: AppSpace.s),
+      Text(
+        'Your daily summary will appear here when the backend is configured.',
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+      const SizedBox(height: AppSpace.xl),
+      _MetricCard(
+        icon: Icons.bedtime_outlined,
+        color: palette.sleep,
+        tint: palette.sleepTint,
+        title: 'Sleep',
+        value: '—',
+        comparison: 'No data yet',
+      ),
+      const SizedBox(height: AppSpace.m),
+      _MetricCard(
+        icon: Icons.favorite_outline,
+        color: palette.heart,
+        tint: palette.heartTint,
+        title: 'Heart',
+        value: '—',
+        comparison: 'No data yet',
+      ),
+      const SizedBox(height: AppSpace.m),
+      _MetricCard(
+        icon: Icons.directions_walk,
+        color: palette.activity,
+        tint: palette.activityTint,
+        title: 'Activity',
+        value: '—',
+        comparison: 'No data yet',
+      ),
+    ];
+  }
 
   List<Widget> _content(TodayData data) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final palette = MetricColors.of(context);
     final connection = data.connection;
     final connected = connection?.isActive == true;
     // Demo rows stand in for a device during development; show them even
     // before Google Health is connected, clearly labelled.
     if (!connected && !data.rows.any((row) => row.isDemo)) {
-      final revoked = connection?.status == ConnectionStatus.revoked;
-      final error = connection?.status == ConnectionStatus.error;
       return [
-        Icon(
-          Icons.watch_outlined,
-          size: 48,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        const SizedBox(height: 16),
-        Text(
-          revoked
-              ? 'Google Health connection revoked'
-              : error
-              ? 'Your Google Health connection needs attention'
-              : 'Connect Google Health to see your daily summary.',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'See sleep, heart rate and activity compared with your usual.',
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: () => context.go('/connect'),
-          child: Text(
-            revoked || error
-                ? 'Reconnect Google Health'
-                : 'Connect Google Health',
+        ConnectPrompt(
+          status: connection?.status,
+          footer: connection?.lastSyncedAt == null ? null : Text(
+            _lastSynced(connection!.lastSyncedAt),
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
           ),
         ),
-        if (connection?.lastSyncedAt != null)
-          Text(_lastSynced(connection!.lastSyncedAt)),
       ];
     }
     final today = civilDate(data.today);
@@ -229,41 +271,43 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
     final current = rows
         .where((row) => civilDate(row.date) == today)
         .firstOrNull;
+    final others = _othersLine(summary);
     return [
-      Text(
-        _sleepInsight(summary.sleep),
-        style: Theme.of(context).textTheme.titleLarge,
-      ),
-      if (rows.any((row) => row.isDemo))
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Chip(
-            avatar: Icon(Icons.science_outlined, size: 18),
-            label: Text('Demo data'),
-          ),
-        ),
+      if (rows.any((row) => row.isDemo)) ...[
+        const DemoDataChip(),
+        const SizedBox(height: AppSpace.s),
+      ],
+      _SleepInsight(sleep: summary.sleep),
+      if (others != null) ...[
+        const SizedBox(height: AppSpace.s),
+        Text(others, style: theme.textTheme.bodyMedium?.copyWith(color: muted)),
+      ],
       if (!rows.any((row) => row.hasData)) ...[
-        const SizedBox(height: 8),
-        const Text(
+        const SizedBox(height: AppSpace.s),
+        Text(
           'No data yet. Sync your device in Google Health, then tap Sync now.',
+          style: theme.textTheme.bodyMedium?.copyWith(color: muted),
         ),
       ],
-      const SizedBox(height: 8),
+      const SizedBox(height: AppSpace.l),
       _MetricCard(
         icon: Icons.bedtime_outlined,
-        color: AppColors.sleep,
+        color: palette.sleep,
+        tint: palette.sleepTint,
         title: 'Sleep',
         value: current?.sleepMinutes == null
             ? '—'
             : _duration(current!.sleepMinutes!),
         comparison: _comparison(summary.sleep, 'min'),
-        delta: summary.sleep.delta,
+        metric: summary.sleep,
         onTap: () => context.go('/trends?metric=sleep',
           extra: DateTime.now().microsecondsSinceEpoch),
       ),
+      const SizedBox(height: AppSpace.m),
       _MetricCard(
         icon: Icons.favorite_outline,
-        color: AppColors.heart,
+        color: palette.heart,
+        tint: palette.heartTint,
         title: 'Heart',
         value: current?.restingHr == null
             ? '—'
@@ -272,13 +316,15 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             ? 'Resting heart rate'
             : 'Resting heart rate · HRV ${_number(current!.hrvMs!)} ms',
         comparison: _comparison(summary.restingHeartRate, 'bpm'),
-        delta: summary.restingHeartRate.delta,
+        metric: summary.restingHeartRate,
         onTap: () => context.go('/trends?metric=heart',
           extra: DateTime.now().microsecondsSinceEpoch),
       ),
+      const SizedBox(height: AppSpace.m),
       _MetricCard(
         icon: Icons.directions_walk,
-        color: AppColors.activity,
+        color: palette.activity,
+        tint: palette.activityTint,
         title: 'Activity',
         value: current?.steps == null
             ? '—'
@@ -287,15 +333,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
             ? null
             : '${current!.activeZoneMin} active zone min',
         comparison: _comparison(summary.steps, 'steps'),
-        delta: summary.steps.delta,
+        metric: summary.steps,
         onTap: () => context.go('/trends?metric=steps',
           extra: DateTime.now().microsecondsSinceEpoch),
       ),
-      const SizedBox(height: 4),
+      const SizedBox(height: AppSpace.s),
       if (!connected)
         Row(
           children: [
-            const Expanded(child: Text('Sample data, not from your device.')),
+            Expanded(child: Text('Sample data, not from your device.',
+              style: theme.textTheme.bodySmall?.copyWith(color: muted))),
             TextButton(
               onPressed: () => context.go('/connect'),
               child: const Text('Connect Google Health'),
@@ -303,40 +350,75 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
           ],
         )
       else
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                _lastSynced(connection!.lastSyncedAt),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: _syncing ? null : _sync,
-              icon: _syncing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.sync),
-              label: Text(_syncing ? 'Syncing…' : 'Sync now'),
-            ),
-          ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, AppSpace.xs, 4, 0),
+          child: Text(
+            _lastSynced(connection!.lastSyncedAt),
+            style: theme.textTheme.bodySmall?.copyWith(color: muted),
+          ),
         ),
       if (_syncMessage != null)
         Semantics(
           liveRegion: true,
-          child: Text(
-            _syncMessage!,
-            style: TextStyle(
-              color: _syncError
-                  ? Theme.of(context).colorScheme.error
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Text(
+              _syncMessage!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _syncError ? theme.colorScheme.error : muted,
+              ),
             ),
           ),
         ),
     ];
+  }
+}
+
+/// One line about heart rate and steps under the sleep insight, or null
+/// while either is missing or still learning.
+String? _othersLine(UsualSummary summary) {
+  final heart = summary.restingHeartRate.status;
+  final steps = summary.steps.status;
+  bool known(UsualStatus s) => s == UsualStatus.steady || s == UsualStatus.changed;
+  if (!known(heart) || !known(steps)) return null;
+  // "also" only follows a lead sentence that itself reports a change.
+  final also = summary.sleep.status == UsualStatus.changed ? 'also ' : '';
+  return switch ((heart, steps)) {
+    (UsualStatus.steady, UsualStatus.steady) =>
+      'Heart rate and steps are within your usual range.',
+    (UsualStatus.changed, UsualStatus.changed) =>
+      'Heart rate and steps ${also}differ from usual.',
+    (UsualStatus.changed, _) =>
+      'Heart rate ${also}differs from usual; steps are within your usual range.',
+    _ =>
+      'Steps ${also}differ from usual; heart rate is within your usual range.',
+  };
+}
+
+/// The lead sentence. When sleep changed, the difference is highlighted.
+class _SleepInsight extends StatelessWidget {
+  const _SleepInsight({required this.sleep});
+  final MetricComparison sleep;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.headlineSmall?.copyWith(fontSize: 28);
+    if (sleep.status != UsualStatus.changed) {
+      return Text(_sleepInsight(sleep), style: style);
+    }
+    final direction = sleep.delta! < 0 ? 'less' : 'more';
+    return Text.rich(
+      TextSpan(children: [
+        const TextSpan(text: 'You slept '),
+        TextSpan(
+          text: '${_delta(sleep.delta!)} min $direction',
+          style: TextStyle(color: theme.colorScheme.primary),
+        ),
+        const TextSpan(text: ' than typical.'),
+      ]),
+      style: style,
+    );
   }
 }
 
@@ -353,9 +435,9 @@ String _sleepInsight(MetricComparison sleep) => switch (sleep.status) {
   UsualStatus.noData => 'No sleep data for last night.',
   UsualStatus.learning =>
     'Still learning your usual (${sleep.sampleDays} of 7 nights).',
-  UsualStatus.steady => 'Your sleep matched your usual.',
+  UsualStatus.steady => 'Your sleep was within your usual range.',
   UsualStatus.changed =>
-    'You slept ${_delta(sleep.delta!)} min ${sleep.delta! < 0 ? 'less' : 'more'} than your usual.',
+    'You slept ${_delta(sleep.delta!)} min ${sleep.delta! < 0 ? 'less' : 'more'} than typical.',
 };
 String _comparison(
   MetricComparison metric,
@@ -364,10 +446,13 @@ String _comparison(
   UsualStatus.noData => 'No data today',
   UsualStatus.learning =>
     'Learning your usual (${metric.sampleDays} of 7 days)',
-  UsualStatus.changed || UsualStatus.steady =>
-    metric.delta!.abs().round() == 0
-        ? 'Same as your usual'
-        : '${_delta(metric.delta!)} $unit ${metric.delta! < 0 ? 'below' : 'above'} usual',
+  UsualStatus.steady => metric.delta!.round() == 0
+      ? 'In your usual range'
+      : 'In your usual range (${_delta(metric.delta!)} $unit '
+            '${metric.delta! < 0 ? 'under' : 'over'} typical)',
+  UsualStatus.changed => metric.delta! < 0
+      ? 'Below your usual range (−${_delta(metric.delta!)} $unit)'
+      : 'Above your usual range (+${_delta(metric.delta!)} $unit)',
 };
 String _lastSynced(DateTime? timestamp) => timestamp == null
     ? 'Last synced: never'
@@ -377,65 +462,87 @@ class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.icon,
     required this.color,
+    required this.tint,
     required this.title,
     required this.value,
     required this.comparison,
     this.secondary,
-    this.delta,
+    this.metric,
     this.onTap,
   });
   final IconData icon;
-  final Color color;
+  final Color color, tint;
   final String title, value, comparison;
   final String? secondary;
-  final double? delta;
+  final MetricComparison? metric;
   final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final m = metric;
+    final delta = m?.delta;
+    // Only a value outside the usual range gets a direction arrow.
+    final arrow = m?.status == UsualStatus.changed && delta != null;
+    final showRange = m != null && m.today != null && m.usual != null &&
+        m.low != null && m.high != null;
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.fromLTRB(AppSpace.l, 14, AppSpace.l, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Icon(icon, size: 20, color: color),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(title, style: theme.textTheme.titleSmall)),
-                  Text(value, style: theme.textTheme.titleLarge),
-                ],
+              MetricIcon(icon: icon, color: color, tint: tint),
+              const SizedBox(width: AppSpace.m),
+              Expanded(
+                flex: 2,
+                child: Text(title, style: theme.textTheme.titleSmall,
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  if (delta != null && delta != 0) ...[
-                    Icon(
-                      delta! < 0 ? Icons.arrow_downward : Icons.arrow_upward,
-                      size: 16,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 4),
-                  ],
-                  Expanded(
-                    child: Text(comparison, style: theme.textTheme.bodyMedium),
-                  ),
-                ],
+              const SizedBox(width: AppSpace.s),
+              Flexible(
+                flex: 3,
+                child: Text(value, style: theme.textTheme.titleLarge,
+                  textAlign: TextAlign.end, maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
               ),
-              if (secondary != null)
-                Text(
-                  secondary!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
             ],
           ),
-        ),
+          if (showRange) ...[
+            const SizedBox(height: 10),
+            UsualRangeBar(
+              value: m.today!, usual: m.usual!, low: m.low!, high: m.high!,
+              color: color,
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              if (arrow) ...[
+                Icon(
+                  delta < 0 ? Icons.arrow_downward : Icons.arrow_upward,
+                  size: 14,
+                  color: muted,
+                ),
+                const SizedBox(width: AppSpace.xs),
+              ],
+              Expanded(
+                child: Text(comparison, style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          if (secondary != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              secondary!,
+              style: theme.textTheme.bodySmall?.copyWith(color: muted),
+            ),
+          ],
+        ],
       ),
     );
   }

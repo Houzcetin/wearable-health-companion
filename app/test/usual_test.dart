@@ -172,14 +172,72 @@ void main() {
     expect(learning.restingHeartRate.status, UsualStatus.learning);
     expect(learning.steps.status, UsualStatus.learning);
   });
-  test('usual range is the 25th to 75th percentile of history', () {
-    final sleep = calculateUsual(
+  test('usual range is the 10th–90th percentile when it is wider', () {
+    final summary = calculateUsual(
       rows([420, 430, 440, 450, 460, 470, 480, 490]),
       today,
+    );
+    expect(summary.sleep.usual, 455);
+    // p10 = 427, p90 = 483 — wider than 455 ± 15.
+    expect(summary.sleep.low, 427);
+    expect(summary.sleep.high, 483);
+    // A steady value lies inside the range.
+    expect(summary.sleep.status, UsualStatus.steady);
+    expect(summary.sleep.today! >= summary.sleep.low!, isTrue);
+    expect(summary.sleep.today! <= summary.sleep.high!, isTrue);
+  });
+  test('steps range is ten percent either side of the usual', () {
+    final steps = calculateUsual(heartAndSteps(steps: 8000), today).steps;
+    expect(steps.low, closeTo(steps.usual! * 0.9, 1e-9));
+    expect(steps.high, closeTo(steps.usual! * 1.1, 1e-9));
+  });
+  test('wide spread: range follows the 10th and 90th percentiles', () {
+    final sleep = calculateUsual(
+      rows([360, 380, 400, 420, 440, 460, 480, 500, 520, 540, 560]),
+      today,
     ).sleep;
-    expect(sleep.low, closeTo(437.5, 1e-9));
-    expect(sleep.high, closeTo(472.5, 1e-9));
-    expect(sleep.low! <= sleep.usual! && sleep.usual! <= sleep.high!, isTrue);
+    expect(sleep.usual, 460);
+    expect(sleep.low, 380); // p10, not 445
+    expect(sleep.high, 540); // p90, not 475
+    const spread = [360, 380, 400, 420, 440, 460, 480, 500, 520, 540, 560];
+    UsualStatus statusOf(int value) =>
+        calculateUsual(rows(spread, current: value), today).sleep.status;
+    // 430 is 30 min from the usual, beyond the 15-min threshold, but inside
+    // the usual range, so it is steady.
+    expect(calculateUsual(rows(spread, current: 430), today).sleep.delta, -30);
+    expect(statusOf(430), UsualStatus.steady);
+    // Both bounds are inclusive; just past them is changed.
+    expect(statusOf(380), UsualStatus.steady);
+    expect(statusOf(540), UsualStatus.steady);
+    expect(statusOf(379), UsualStatus.changed);
+    expect(statusOf(541), UsualStatus.changed);
+  });
+  test('narrow spread: range never narrower than the steady threshold', () {
+    final sleep = calculateUsual(
+      rows([448, 449, 450, 450, 450, 451, 452]),
+      today,
+    ).sleep;
+    expect(sleep.usual, 450);
+    expect(sleep.low, 435);
+    expect(sleep.high, 465);
+  });
+  test('one side can widen while the other stays at the threshold', () {
+    final sleep = calculateUsual(
+      rows([450, 450, 450, 450, 450, 450, 450, 520, 540, 560, 580]),
+      today,
+    ).sleep;
+    expect(sleep.usual, 450);
+    expect(sleep.low, 435); // p10 = 450 is inside 450 − 15
+    expect(sleep.high, 560); // p90 = 560 beats 450 + 15
+  });
+  test('fewer than seven days: no range, as before', () {
+    final sleep = calculateUsual(
+      rows([300, 450, 600, 450, 450, 450]),
+      today,
+    ).sleep;
+    expect(sleep.sampleDays, 6);
+    expect(sleep.low, isNull);
+    expect(sleep.high, isNull);
   });
   test('usual range is null while learning', () {
     final sleep = calculateUsual(rows([420, 430, 440]), today).sleep;
@@ -191,5 +249,17 @@ void main() {
     expect(percentile([1, 2, 3, 4], 0.5), 2.5);
     expect(percentile([1, 2, 3, 4, 5], 0.25), 2);
     expect(percentile([7], 0.75), 7);
+  });
+  test('percentile with an even count interpolates at the tails', () {
+    expect(percentile([1, 2, 3, 4], 0.1), closeTo(1.3, 1e-9));
+    expect(percentile([1, 2, 3, 4], 0.9), closeTo(3.7, 1e-9));
+    expect(percentile([1, 2, 3, 4], 0), 1);
+    expect(percentile([1, 2, 3, 4], 1), 4);
+  });
+  test('percentile with repeated values', () {
+    expect(percentile([5, 5, 5, 9], 0.5), 5);
+    expect(percentile([5, 5, 5, 9], 0.1), 5);
+    expect(percentile([5, 5, 5, 9], 0.9), closeTo(7.8, 1e-9));
+    expect(percentile([3, 3, 3, 3], 0.9), 3);
   });
 }

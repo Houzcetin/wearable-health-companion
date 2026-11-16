@@ -274,6 +274,7 @@ ThemeData buildTheme(Brightness brightness) {
       iconColor: scheme.onSurfaceVariant,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       minVerticalPadding: 10,
+      titleTextStyle: text.titleSmall?.copyWith(fontSize: 15),
       subtitleTextStyle: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
     ),
     dividerTheme: DividerThemeData(
