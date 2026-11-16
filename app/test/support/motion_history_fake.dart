@@ -18,6 +18,7 @@ class FakeMotionHistory extends MotionHistorySource {
   @override
   Future<bool> takeOpenRequest() async => false;
   List<ActivitySample>? activities;
+  HistorySteps? stepsResult;
   @override
   Future<Map<String, dynamic>> readState(String owner) async =>
       stored[owner] ?? {};
@@ -39,7 +40,10 @@ class FakeMotionHistory extends MotionHistorySource {
   @override
   Future<void> setActiveWorkout(WorkoutSession? session) async {
     activeWorkouts.add(session);
-    if (session != null) await advanceRefreshCursor(session.measuredAt);
+    if (session != null &&
+        (refreshCursor == null || session.measuredAt.isAfter(refreshCursor!))) {
+      refreshCursor = session.measuredAt;
+    }
   }
 
   @override
@@ -81,8 +85,9 @@ class FakeMotionHistory extends MotionHistorySource {
     final end = to.isAfter(origin.add(const Duration(minutes: 35)))
         ? origin.add(const Duration(minutes: 35))
         : to;
-    return HistorySteps(
-      end.isAfter(start) ? end.difference(start).inSeconds * 100 ~/ 60 : 0,
-    );
+    return stepsResult ??
+        HistorySteps(
+          end.isAfter(start) ? end.difference(start).inSeconds * 100 ~/ 60 : 0,
+        );
   }
 }

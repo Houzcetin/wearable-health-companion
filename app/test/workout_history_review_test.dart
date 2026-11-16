@@ -281,6 +281,80 @@ void main() {
     expect(source.stepRanges, isEmpty);
   });
 
+  test('active markers expire after 15 minutes or 24 hours from onset', () {
+    WorkoutSession snapshot({
+      DateTime? from,
+      DateTime? through,
+      DateTime? end,
+    }) => WorkoutSession(
+      type: ExerciseType.walk,
+      startedAt: from ?? origin,
+      measuredAt: through ?? origin,
+      endedAt: end,
+      steps: 0,
+      source: WorkoutSource.manual,
+    );
+    final active = snapshot();
+    final expiry = origin.add(const Duration(minutes: 15));
+    expect(active.isFreshActiveAt(expiry), isTrue);
+    expect(
+      active.isFreshActiveAt(expiry.add(const Duration(milliseconds: 1))),
+      isFalse,
+    );
+    final cap = origin.add(const Duration(hours: 24));
+    expect(snapshot(through: cap).isFreshActiveAt(cap), isTrue);
+    final afterCap = cap.add(const Duration(milliseconds: 1));
+    expect(snapshot(through: afterCap).isFreshActiveAt(afterCap), isFalse);
+    expect(snapshot(through: now).isFreshActiveAt(origin), isFalse);
+    expect(snapshot(from: now).isFreshActiveAt(now), isFalse);
+    expect(snapshot(end: now).isFreshActiveAt(now), isFalse);
+  });
+
+  for (final age in [
+    const Duration(minutes: 15),
+    const Duration(minutes: 15, milliseconds: 1),
+  ]) {
+    test(
+      'review ignores an active marker only while fresh (age $age)',
+      () async {
+        final controller = review();
+        await controller.check(
+          enabled: true,
+          weightKg: 70,
+          active: WorkoutSession(
+            type: ExerciseType.walk,
+            startedAt: origin,
+            measuredAt: now.subtract(age),
+            steps: 0,
+            source: WorkoutSource.manual,
+          ),
+        );
+        final expired = age > const Duration(minutes: 15);
+        expect(controller.candidates, hasLength(expired ? 1 : 0));
+        expect(source.stepRanges, hasLength(expired ? 1 : 0));
+      },
+    );
+  }
+
+  test(
+    'a renewed marker older than 24 hours does not suppress a review',
+    () async {
+      final controller = review();
+      await controller.check(
+        enabled: true,
+        weightKg: 70,
+        active: WorkoutSession(
+          type: ExerciseType.walk,
+          startedAt: now.subtract(const Duration(hours: 24, milliseconds: 1)),
+          measuredAt: now,
+          steps: 0,
+          source: WorkoutSource.manual,
+        ),
+      );
+      expect(controller.candidates, hasLength(1));
+    },
+  );
+
   test(
     'step queries are sequential and bounded, retaining excess bouts for next check',
     () async {

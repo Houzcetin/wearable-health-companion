@@ -105,7 +105,7 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
                 'Did you ${review.type.name == 'bike' ? 'cycle' : review.type.name} '
                 '${DateFormat.Hm().format(review.startedAt.toLocal())}–'
                 '${DateFormat.Hm().format(review.endedAt!.toLocal())}? '
-                '${NumberFormat.decimalPattern().format(review.steps)} steps',
+                '${review.steps > 0 ? '${NumberFormat.decimalPattern().format(review.steps)} steps' : 'Steps unavailable'}',
                 style: body?.copyWith(fontWeight: FontWeight.w600),
               ),
               Wrap(
