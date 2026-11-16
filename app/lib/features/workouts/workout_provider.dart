@@ -2,15 +2,36 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/providers.dart';
+import '../../core/router.dart' show routerProvider;
 import 'data/activity_sources.dart';
+import 'data/local_workout_notifications.dart';
+import 'data/motion_history_source.dart';
 import 'data/simulated_sources.dart';
 import 'data/workout_repository.dart';
+import 'data/workout_history_review.dart';
 import 'domain/activity_sample.dart';
 import 'domain/auto_workout_detector.dart';
 import 'domain/workout_session.dart';
+import 'domain/workout_notification_bridge.dart';
+
+final motionHistorySourceProvider = Provider<MotionHistorySource>(
+  (ref) => MotionHistorySource(),
+);
+final workoutNotificationSinkProvider = Provider<WorkoutNotificationSink>(
+  (ref) => LocalWorkoutNotifications(),
+);
+
+WidgetsBinding? _workoutBinding() {
+  try {
+    return WidgetsBinding.instance;
+  } catch (_) {
+    return null;
+  }
+}
 
 final workoutClockProvider = Provider<WorkoutClock>((ref) => DateTime.now);
 final detectorConfigProvider = Provider<DetectorConfig>(
@@ -90,6 +111,9 @@ class WorkoutState {
     this.simulator = false,
     this.weightKg = 70,
     this.sensorNotice,
+    this.resumed = true,
+    this.historyCandidates = const [],
+    this.historyNotice,
   });
 
   final DateTime now;
@@ -103,13 +127,17 @@ class WorkoutState {
   final bool autoStart, autoStop, simulator;
   final double weightKg;
   final String? sensorNotice;
+  final bool resumed;
+  final List<WorkoutSession> historyCandidates;
+  final String? historyNotice;
 }
 
 final workoutProvider = NotifierProvider<WorkoutNotifier, WorkoutState>(
   WorkoutNotifier.new,
 );
 
-class WorkoutNotifier extends Notifier<WorkoutState> {
+class WorkoutNotifier extends Notifier<WorkoutState>
+    implements WorkoutPromptActions {
   late AutoWorkoutDetector _detector;
   late WorkoutClock _realClock;
   late WorkoutRepository _repository;
@@ -127,6 +155,11 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
   int _generation = 0;
   int _buildVersion = 0;
   DateTime? _loadedDay, _lastRetryAt;
+  late WorkoutNotificationBridge _notifications;
+  late WorkoutHistoryReview _history;
+  bool _resumed = true;
+  String? _historyNotice;
+  DateTime? _lastDetectorAdvance;
 
   @override
   WorkoutState build() {
@@ -148,6 +181,51 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
       clock: () => _simulationClock?.now() ?? _realClock(),
       config: ref.read(detectorConfigProvider),
     );
+    final binding = _workoutBinding();
+    _resumed =
+        binding?.lifecycleState == null ||
+        binding?.lifecycleState == AppLifecycleState.resumed;
+    _historyNotice = null;
+    _lastDetectorAdvance = _realClock();
+    _notifications = WorkoutNotificationBridge(
+      sink: ref.read(workoutNotificationSinkProvider),
+      actions: this,
+      onOpen: _openWorkouts,
+    );
+    _history = WorkoutHistoryReview(
+      source: ref.read(motionHistorySourceProvider),
+      repository: _repository,
+      owner: ref.read(currentUserProvider)?.id ?? 'local',
+      clock: _realClock,
+      config: ref.read(detectorConfigProvider),
+    );
+    _history.source.onOpen(() => unawaited(_takeHistoryOpen(version)));
+    final lifecycle = binding == null
+        ? null
+        : AppLifecycleListener(
+            onStateChange: (value) {
+              if (!ref.mounted || version != _buildVersion) return;
+              _resumed = value == AppLifecycleState.resumed;
+              // A cached movement state cannot prove that activity continued
+              // while Dart was suspended. Let history handle that missing period.
+              if (_detector.phase == DetectorPhase.candidate &&
+                  _realClock().difference(_lastDetectorAdvance!) >
+                      const Duration(minutes: 1)) {
+                _detector =
+                    AutoWorkoutDetector(
+                        clock: _detector.clock,
+                        config: _detector.config,
+                      )
+                      ..autoStartPrompts = _detector.autoStartPrompts
+                      ..autoStopPrompts = _detector.autoStopPrompts
+                      ..weightKg = _detector.weightKg;
+              }
+              _lastDetectorAdvance = _realClock();
+              _detector.tick();
+              _publish();
+              if (_resumed) unawaited(checkHistory());
+            },
+          );
     final repositorySubscription = _repository.changes.listen((_) {
       if (ref.mounted && version == _buildVersion) _publish();
     });
@@ -158,9 +236,14 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
         _ensureTimer();
         _publish();
         _loadToday();
+        unawaited(_takeHistoryOpen(version));
+        unawaited(checkHistory());
       }
     });
     ref.onDispose(() {
+      lifecycle?.dispose();
+      _history.source.onOpen(null);
+      _notifications.dispose();
       _buildVersion++;
       _generation++;
       _timer?.cancel();
@@ -192,6 +275,7 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
       (sample) {
         if (!ref.mounted || generation != _generation) return;
         _detector.addActivity(sample);
+        _lastDetectorAdvance = _realClock();
         changed();
       },
       onError: failed,
@@ -221,6 +305,7 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
   }
 
   void tick() {
+    _lastDetectorAdvance = _realClock();
     final simulation = _simulationClock;
     if (simulation != null) {
       final elapsed = _tickInterval ?? const Duration(seconds: 15);
@@ -285,13 +370,95 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
           _streamError ??
           _activitySource.unavailableReason ??
           _stepSource.unavailableReason,
+      resumed: _resumed,
+      historyCandidates: _detector.autoStartPrompts
+          ? List.unmodifiable(_history.candidates)
+          : const [],
+      historyNotice: _historyNotice,
     );
+    unawaited(
+      _notifications.update(
+        resumed: _resumed,
+        autoStart: state.autoStart,
+        autoStop: state.autoStop,
+        now: now,
+        start: state.startPrompt,
+        stop: state.stopPrompt,
+      ),
+    );
+  }
+
+  Future<void> requestNotificationPermission() async {
+    final granted = await _notifications.requestPermission();
+    if (!ref.mounted) return;
+    _historyNotice = granted
+        ? 'Workout notifications enabled.'
+        : 'Notifications unavailable or denied. You can enable them in your phone settings.';
+    _publish();
+  }
+
+  void _openWorkouts() {
+    if (ref.mounted) ref.read(routerProvider).go('/today');
+  }
+
+  Future<void> _takeHistoryOpen(int version) async {
+    try {
+      final opened = await _history.source.takeOpenRequest();
+      if (opened && ref.mounted && version == _buildVersion) {
+        _openWorkouts();
+        unawaited(checkHistory());
+      }
+    } catch (_) {
+      // A missing native channel must not interfere with live detection.
+    }
+  }
+
+  Future<void> checkHistory() async {
+    final version = _buildVersion;
+    final history = _history;
+    try {
+      await history.source.configure(
+        enabled: _detector.autoStartPrompts && _simulationClock == null,
+      );
+      if (!ref.mounted || version != _buildVersion) return;
+      await history.check(
+        enabled: _detector.autoStartPrompts && _simulationClock == null,
+        weightKg: _detector.weightKg,
+        active: _detector.currentSession,
+      );
+      if (!ref.mounted || version != _buildVersion) return;
+      _historyNotice = null;
+      _publish();
+    } catch (_) {
+      if (!ref.mounted || version != _buildVersion) return;
+      _historyNotice =
+          'Motion history unavailable. We’ll try again when you return.';
+      _publish();
+    }
+  }
+
+  Future<void> reviewHistory(
+    WorkoutSession candidate, {
+    required bool save,
+  }) async {
+    final version = _buildVersion;
+    try {
+      await _history.resolve(candidate, save: save);
+      if (!ref.mounted || version != _buildVersion) return;
+      _historyNotice = null;
+      _publish();
+    } catch (_) {
+      if (!ref.mounted || version != _buildVersion) return;
+      _historyNotice = 'Could not update this suggestion. Please try again.';
+      _publish();
+    }
   }
 
   void setAutoStart(bool enabled) {
     _detector.autoStartPrompts = enabled;
     _detector.tick();
     _publish();
+    unawaited(checkHistory());
   }
 
   void setAutoStop(bool enabled) {
@@ -307,22 +474,26 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
     return true;
   }
 
+  @override
   void acceptStart(ExerciseType type) {
     _detector.acceptStart(type);
     _ensureTimer();
     _publish();
   }
 
+  @override
   void dismissStart() {
     _detector.dismissStart();
     _publish();
   }
 
+  @override
   void acceptStop() {
     _detector.acceptStop();
     _publish();
   }
 
+  @override
   void dismissStop() {
     _detector.dismissStop();
     _publish();

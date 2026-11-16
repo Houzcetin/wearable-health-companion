@@ -73,6 +73,33 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
               if (state.sensorNotice != null)
                 Text(state.sensorNotice!, style: theme.textTheme.bodySmall),
               if (state.simulator) const Text('Simulator · 20× speed'),
+              if (state.historyNotice != null) Text(state.historyNotice!),
+              for (final review in state.historyCandidates) ...[
+                const Divider(),
+                Text(
+                  'Did you ${review.type.name == 'bike' ? 'cycle' : review.type.name} '
+                  '${DateFormat.Hm().format(review.startedAt.toLocal())}–'
+                  '${DateFormat.Hm().format(review.endedAt!.toLocal())}? '
+                  '${NumberFormat.decimalPattern().format(review.steps)} steps',
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    FilledButton.tonal(
+                      onPressed: () => ref
+                          .read(workoutProvider.notifier)
+                          .reviewHistory(review, save: true),
+                      child: const Text('Save'),
+                    ),
+                    TextButton(
+                      onPressed: () => ref
+                          .read(workoutProvider.notifier)
+                          .reviewHistory(review, save: false),
+                      child: const Text('Discard'),
+                    ),
+                  ],
+                ),
+              ],
               if (state.todaySessions.isNotEmpty) ...[
                 const Divider(),
                 Text("Today's workouts", style: theme.textTheme.titleSmall),

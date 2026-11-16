@@ -47,7 +47,7 @@ class _WorkoutPromptHostState extends ConsumerState<WorkoutPromptHost> {
 
   void _sync() {
     final state = ref.read(workoutProvider);
-    final desired = _active ? _desired(state) : null;
+    final desired = _active && state.resumed ? _desired(state) : null;
     if (identical(desired, _shown)) return;
     if (_route?.isActive == true) {
       _route!.navigator!.removeRoute(_route!);
@@ -55,7 +55,6 @@ class _WorkoutPromptHostState extends ConsumerState<WorkoutPromptHost> {
     _route = null;
     _shown = desired;
     if (desired == null) return;
-    // TODO: Foreground sheets only; local push notifications are out of scope.
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
