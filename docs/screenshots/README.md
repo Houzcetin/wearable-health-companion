@@ -28,3 +28,9 @@ The test loads Roboto and Material Icons from the Flutter SDK
 so text and icons render with real glyphs instead of boxes. If the SDK is not
 found automatically, set `FLUTTER_ROOT`. Fixtures live in
 `app/test/screenshots/screenshots_test.dart`; edit them to change what is shown.
+
+## Notes
+
+- Workout durations differ on purpose: a running workout shows a stopwatch
+  (`10:00`, mm:ss), a finished one in Today's workouts shows a length
+  (`30 min`, or `1 h 05 min` from an hour up).

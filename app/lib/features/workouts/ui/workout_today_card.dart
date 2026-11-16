@@ -151,6 +151,8 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
 String _steps(int steps) => NumberFormat.decimalPattern('en').format(steps);
 
 /// A finished workout's length: "30 min", or "1 h 05 min" from an hour up.
+/// Deliberately unlike the live clock above ([workoutDuration], mm:ss): a
+/// running workout reads as a stopwatch, a finished one as a duration.
 String _minutes(Duration duration) {
   final minutes = duration.inMinutes;
   return minutes < 60

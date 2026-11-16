@@ -31,6 +31,42 @@ void main() {
     expect(chart.data.barGroups.length, 7);
   });
 
+  Finder inChart(String text) =>
+      find.descendant(of: find.byType(BarChart), matching: find.text(text));
+
+  testWidgets('month x axis suppresses the label next to the last day', (
+    tester,
+  ) async {
+    await startStage5(tester, screen: const TrendsScreen(),
+      health: FakeHealthRepository(rows: trendRows()));
+    await tester.tap(find.text('Month'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<BarChart>(find.byType(BarChart)).data.barGroups.length, 30);
+    // Index 0, 7, 14, 21 are weekly labels (Oct 14, 21, 28, Nov 4).
+    for (final day in ['14', '21', '28']) {
+      expect(inChart(day), findsOneWidget, reason: 'weekly label $day');
+    }
+    expect(inChart('4'), findsWidgets); // also a y-axis value
+    // Index 28 (Nov 11) would touch the last day, so it is dropped...
+    expect(inChart('11'), findsNothing);
+    // ...and index 29 (Nov 12) is always labelled.
+    expect(inChart('12'), findsOneWidget);
+  });
+
+  testWidgets('week x axis labels all seven days', (tester) async {
+    await startStage5(tester, screen: const TrendsScreen(),
+      health: FakeHealthRepository(rows: trendRows()));
+    expect(tester.widget<BarChart>(find.byType(BarChart)).data.barGroups.length, 7);
+    // Nov 6 to Nov 12. Even numbers can also be y-axis values, so only the
+    // odd days and the 12th are unambiguous; the rest must still be present.
+    for (final day in ['7', '9', '11', '12']) {
+      expect(inChart(day), findsOneWidget, reason: 'day $day');
+    }
+    for (final day in ['6', '8', '10']) {
+      expect(inChart(day), findsWidgets, reason: 'day $day');
+    }
+  });
+
   testWidgets('missing day has an empty slot, marker and accessible value', (tester) async {
     final semantics = tester.ensureSemantics();
     final rows = trendRows()
