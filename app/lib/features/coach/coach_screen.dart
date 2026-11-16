@@ -223,10 +223,7 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
               controller: _input,
               maxLength: 500, maxLines: 3, minLines: 1,
               inputFormatters: [LengthLimitingTextInputFormatter(500)],
-              decoration: const InputDecoration(
-                labelText: 'Ask the coach',
-                floatingLabelBehavior: FloatingLabelBehavior.never,
-              ),
+              decoration: const InputDecoration(hintText: 'Ask the coach'),
               // The 500-character limit only matters near the end.
               buildCounter: (context, {required currentLength, required isFocused,
                   required maxLength}) => currentLength > 400

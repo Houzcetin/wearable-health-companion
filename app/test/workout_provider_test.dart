@@ -9,12 +9,14 @@ import 'package:wearable_companion/data/profile_repository.dart';
 import 'package:wearable_companion/data/providers.dart';
 import 'package:wearable_companion/features/workouts/data/activity_sources.dart';
 import 'package:wearable_companion/features/workouts/data/pending_workout_queue.dart';
+import 'package:wearable_companion/features/workouts/data/motion_history_source.dart';
 import 'package:wearable_companion/features/workouts/data/workout_repository.dart';
 import 'package:wearable_companion/features/workouts/data/workout_row.dart';
 import 'package:wearable_companion/features/workouts/domain/activity_sample.dart';
 import 'package:wearable_companion/features/workouts/workout_provider.dart';
 
 import 'support/fake_repositories.dart';
+import 'support/motion_history_fake.dart';
 import 'support/workout_fakes.dart';
 
 class CountingWorkoutRepository extends InMemoryWorkoutRepository {
@@ -45,6 +47,7 @@ void main() {
     bool signedIn = true,
     bool consented = true,
     WorkoutRepository? repository,
+    MotionHistorySource? history,
   }) async {
     auth = FakeAuthRepository(user: signedIn ? testUser : null);
     profiles = FakeProfileRepository(consented: consented);
@@ -58,6 +61,8 @@ void main() {
         workoutTickIntervalProvider.overrideWithValue(null),
         activitySourceProvider.overrideWithValue(UnavailableActivitySource()),
         stepSourceProvider.overrideWithValue(UnavailableStepSource()),
+        if (history != null)
+          motionHistorySourceProvider.overrideWithValue(history),
         if (repository != null)
           workoutRepositoryProvider.overrideWithValue(repository),
       ],
@@ -194,6 +199,44 @@ void main() {
         DateTime(2026, 11, 18),
       ));
       expect(repository.loads, hasLength(2));
+    },
+  );
+
+  test(
+    'live active/finished workouts and repository saves advance the native cursor',
+    () async {
+      final history = FakeMotionHistory(now)..activities = [];
+      final repository = InMemoryWorkoutRepository();
+      await setup(configured: false, repository: repository, history: history);
+      expect(history.activeWorkouts, [
+        null,
+      ]); // Clear a previous process marker.
+      final notifier = container.read(workoutProvider.notifier);
+      final start = now;
+      notifier.manualStart(ExerciseType.walk);
+      expect(history.activeWorkouts.last!.startedAt, start);
+      expect(history.cursorAdvances.last, start);
+      now = now.add(const Duration(minutes: 10));
+      notifier.tick();
+      expect(history.activeWorkouts.last!.measuredAt, now);
+      expect(history.cursorAdvances.last, now);
+      notifier.acceptStop();
+      await settle();
+      expect(history.activeWorkouts.last, isNull);
+      expect(history.refreshCursor, repository.sessions.single.endedAt);
+      final savedLater = finishedWorkout(
+        start: now.add(const Duration(minutes: 1)),
+      );
+      await repository.save(savedLater);
+      await settle();
+      expect(history.cursorAdvances.last, savedLater.endedAt);
+      final before = history.cursorAdvances.length;
+      await repository.save(
+        finishedWorkout(start: start.subtract(const Duration(hours: 1))),
+      );
+      await settle();
+      expect(history.cursorAdvances, hasLength(before));
+      expect(history.refreshCursor, savedLater.endedAt);
     },
   );
 

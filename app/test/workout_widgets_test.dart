@@ -1,13 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wearable_companion/features/workouts/data/motion_history_source.dart';
 import 'package:wearable_companion/features/workouts/data/simulated_sources.dart';
 import 'package:wearable_companion/features/workouts/data/workout_repository.dart';
 import 'package:wearable_companion/features/workouts/domain/activity_sample.dart';
 import 'package:wearable_companion/features/workouts/domain/workout_session.dart';
+import 'package:wearable_companion/features/workouts/domain/workout_notification_bridge.dart';
 import 'package:wearable_companion/features/workouts/ui/workout_settings_section.dart';
 import 'package:wearable_companion/features/workouts/ui/workout_today_card.dart';
 import 'package:wearable_companion/features/workouts/workout_provider.dart';
+
+import 'support/motion_history_fake.dart';
+
+class WidgetNotifications implements WorkoutNotificationSink {
+  final shown = <WorkoutPromptNotification>[];
+  int cancellations = 0, permissions = 0, checks = 0;
+  bool granted = true;
+  late void Function(String, String?) action;
+  @override
+  Future<void> initialize(void Function(String, String?) onAction) async =>
+      action = onAction;
+  @override
+  Future<bool> checkPermission() async {
+    checks++;
+    return granted;
+  }
+
+  @override
+  Future<bool> requestPermission() async {
+    permissions++;
+    return granted;
+  }
+
+  @override
+  Future<void> show(WorkoutPromptNotification prompt) async =>
+      shown.add(prompt);
+  @override
+  Future<void> cancel() async => cancellations++;
+}
 
 void main() {
   late DateTime now;
@@ -20,6 +51,8 @@ void main() {
     WidgetTester tester, {
     bool settings = false,
     WorkoutRepository? repository,
+    MotionHistorySource? history,
+    WorkoutNotificationSink? notifications,
   }) async {
     now = DateTime(2026, 11, 16, 12);
     activity = SimulatedActivitySource(clock: () => now);
@@ -32,6 +65,10 @@ void main() {
         workoutTickIntervalProvider.overrideWithValue(null),
         if (repository != null)
           workoutRepositoryProvider.overrideWithValue(repository),
+        if (history != null)
+          motionHistorySourceProvider.overrideWithValue(history),
+        if (notifications != null)
+          workoutNotificationSinkProvider.overrideWithValue(notifications),
       ],
     );
     addTearDown(() async {
@@ -66,6 +103,152 @@ void main() {
     notifier.tick();
   }
 
+  testWidgets('only the settings notification button requests permission', (
+    tester,
+  ) async {
+    final notifications = WidgetNotifications()..granted = false;
+    await show(tester, settings: true, notifications: notifications);
+    expect(notifications.permissions, 0);
+    final button = find.text('Enable workout notifications');
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(notifications.permissions, 1);
+    expect(
+      find.textContaining('Notifications unavailable or denied'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('cold-start history review saves through the repository', (
+    tester,
+  ) async {
+    final history = FakeMotionHistory(DateTime(2026, 11, 16, 9, 10));
+    await show(tester, history: history);
+    expect(find.text('Did you walk 09:10–09:45? 3,500 steps'), findsOneWidget);
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save'), findsNothing);
+    expect(container.read(workoutProvider).todaySessions.single.steps, 3500);
+    expect(
+      container.read(workoutProvider).todaySessions.single.source,
+      WorkoutSource.auto,
+    );
+  });
+
+  testWidgets(
+    'lifecycle routes background prompts to notifications and action to notifier',
+    (tester) async {
+      final notifications = WidgetNotifications();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await show(tester, notifications: notifications);
+      activity.emit(ActivityType.running);
+      for (final value in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      advance(const Duration(minutes: 3));
+      await tester.pumpAndSettle();
+      expect(find.text('Start run?'), findsNothing);
+      expect(notifications.shown.single.title, 'Start Run?');
+      notifications.action('start', notifications.shown.single.key);
+      await tester.pumpAndSettle();
+      expect(container.read(workoutProvider).session!.type, ExerciseType.run);
+      for (final value in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+      expect(notifications.cancellations, greaterThan(1));
+    },
+  );
+
+  testWidgets('resume checks history and Discard removes the suggestion', (
+    tester,
+  ) async {
+    final history = FakeMotionHistory(DateTime(2026, 11, 16, 12, 5));
+    await show(tester, history: history);
+    expect(container.read(workoutProvider).historyCandidates, isEmpty);
+    for (final value in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(value);
+    }
+    now = now.add(const Duration(hours: 1));
+    for (final value in [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(value);
+    }
+    await tester.pumpAndSettle();
+    expect(container.read(workoutProvider).historyCandidates, hasLength(1));
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(container.read(workoutProvider).historyCandidates, isEmpty);
+    expect(container.read(workoutProvider).todaySessions, isEmpty);
+  });
+
+  testWidgets(
+    'denied background prompt still shows a sheet on resume and rechecks permission',
+    (tester) async {
+      final notifications = WidgetNotifications()..granted = false;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await show(tester, notifications: notifications);
+      activity.emit(ActivityType.running);
+      for (final value in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      advance(const Duration(minutes: 3));
+      await tester.pumpAndSettle();
+      expect(notifications.shown, isEmpty);
+      expect(notifications.permissions, 0);
+      for (final value in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Start run?'), findsOneWidget);
+      final checks = notifications.checks;
+      notifications.granted = true; // Changed in OS settings while resumed.
+      for (final value in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+      expect(notifications.checks, greaterThan(checks));
+      expect(notifications.shown.single.title, 'Start Run?');
+      expect(notifications.permissions, 0);
+      for (final value in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets('Today watches fake sources and renders a six minute candidate', (
     tester,
   ) async {
@@ -76,6 +259,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text("Looks like you're walking (6 min)"), findsOneWidget);
     expect(find.text('Start walk?'), findsNothing);
+  });
+
+  testWidgets('resume does not extend a stale candidate across suspension', (
+    tester,
+  ) async {
+    await show(tester);
+    activity.emit(ActivityType.walking);
+    for (final value in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(value);
+    }
+    now = now.add(const Duration(hours: 2)); // No Dart timer/sensor delivery.
+    for (final value in [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(value);
+    }
+    await tester.pumpAndSettle();
+    expect(container.read(workoutProvider).startPrompt, isNull);
+    expect(container.read(workoutProvider).candidateType, isNull);
   });
 
   testWidgets(
@@ -93,7 +301,7 @@ void main() {
       await tester.tap(find.text('Start Run instead'));
       await tester.pumpAndSettle();
       expect(find.text('Run · 10:00'), findsOneWidget);
-      expect(find.text('1000 steps · 0.75 km'), findsOneWidget);
+      expect(find.text('1,000 steps · 0.75 km'), findsOneWidget);
       advance(const Duration(minutes: 1));
       steps.emit(2160);
       await tester.pumpAndSettle();

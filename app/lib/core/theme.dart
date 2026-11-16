@@ -206,6 +206,16 @@ ThemeData buildTheme(Brightness brightness) {
               ? scheme.onSurface : scheme.onSurfaceVariant,
         )),
     ),
+    switchTheme: SwitchThemeData(
+      // An off switch needs a visible track and outline on dark cards.
+      trackOutlineColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.selected) ? Colors.transparent
+              : scheme.outline),
+      thumbColor: WidgetStateProperty.resolveWith((states) =>
+          states.contains(WidgetState.disabled) ? null
+              : states.contains(WidgetState.selected) ? null
+              : scheme.onSurfaceVariant),
+    ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         shape: stadium,
