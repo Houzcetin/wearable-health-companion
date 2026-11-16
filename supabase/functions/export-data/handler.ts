@@ -34,7 +34,7 @@ export async function handler(req: Request, deps: Dependencies = {}): Promise<Re
         if (page.length < 1000) return all;
       }
     };
-    const [user, profile, connection, consent, metrics, messages] = await Promise.all([
+    const [user, profile, connection, consent, metrics, messages, workouts] = await Promise.all([
       db.auth.admin.getUserById(userId),
       db.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       db.from("health_connections").select("status,connected_at,last_synced_at,scopes")
@@ -42,6 +42,7 @@ export async function handler(req: Request, deps: Dependencies = {}): Promise<Re
       rows("consent_events", "id"),
       rows("daily_metrics", "date"),
       rows("coach_messages", "id"),
+      rows("workouts", "started_at"),
     ]);
     check(user.error);
     check(profile.error);
@@ -63,6 +64,7 @@ export async function handler(req: Request, deps: Dependencies = {}): Promise<Re
         : null,
       daily_metrics: metrics,
       coach_messages: messages,
+      workouts,
     });
   } catch (error) {
     return errorResponse(error);

@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/providers.dart';
 import 'data/activity_sources.dart';
 import 'data/simulated_sources.dart';
 import 'data/workout_repository.dart';
@@ -35,9 +36,38 @@ final stepSourceProvider = Provider<StepSource>((ref) {
     requestPermission: ref.watch(motionPermissionProvider).request,
   );
 });
-final workoutRepositoryProvider = Provider<WorkoutRepository>(
-  (ref) => InMemoryWorkoutRepository(),
-);
+final workoutStoreProvider = Provider<WorkoutStore?>((ref) {
+  try {
+    final client = ref.watch(supabaseClientProvider);
+    return client == null ? null : SupabaseWorkoutStore(client);
+  } catch (_) {
+    // Widget tests can configure fake auth/profile repositories without
+    // initializing the Supabase singleton.
+    return null;
+  }
+});
+final workoutRepositoryProvider = Provider<WorkoutRepository>((ref) {
+  final configured = ref.watch(backendConfiguredProvider);
+  final userId = ref.watch(currentUserProvider.select((user) => user?.id));
+  WorkoutStore? store;
+  if (configured && userId != null) {
+    // Matching the profile's owner also guards against stale async profile data
+    // during an account switch. Refreshing the same consent keeps the queue.
+    final consent = ref.watch(
+      profileProvider.select(
+        (profile) => (profile.value?.userId, profile.value?.hasHealthConsent),
+      ),
+    );
+    if (consent.$1 == userId && consent.$2 == true) {
+      store = ref.watch(workoutStoreProvider);
+    }
+  }
+  final WorkoutRepository repository = store == null
+      ? InMemoryWorkoutRepository()
+      : SupabaseWorkoutRepository(store: store, userId: userId!);
+  ref.onDispose(repository.dispose);
+  return repository;
+});
 
 /// Null disables scheduling for tests; the domain still advances via tick().
 final workoutTickIntervalProvider = Provider<Duration?>(
@@ -95,11 +125,22 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
   WorkoutSession? _summary;
   String? _streamError;
   int _generation = 0;
+  int _buildVersion = 0;
+  DateTime? _loadedDay, _lastRetryAt;
 
   @override
   WorkoutState build() {
+    final version = ++_buildVersion;
     _realClock = ref.read(workoutClockProvider);
-    _repository = ref.read(workoutRepositoryProvider);
+    _repository = ref.watch(workoutRepositoryProvider);
+    _summary = null;
+    _streamError = null;
+    _simulationClock = null;
+    _simulatedActivity = null;
+    _simulatedSteps = null;
+    _timer = null;
+    _loadedDay = null;
+    _lastRetryAt = null;
     _activitySource = ref.read(activitySourceProvider);
     _stepSource = ref.read(stepSourceProvider);
     _tickInterval = ref.read(workoutTickIntervalProvider);
@@ -107,18 +148,25 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
       clock: () => _simulationClock?.now() ?? _realClock(),
       config: ref.read(detectorConfigProvider),
     );
+    final repositorySubscription = _repository.changes.listen((_) {
+      if (ref.mounted && version == _buildVersion) _publish();
+    });
     // Start listening after build so even synchronous fake streams are safe.
     Future.microtask(() {
-      if (ref.mounted) {
+      if (ref.mounted && version == _buildVersion) {
         _subscribe();
+        _ensureTimer();
         _publish();
+        _loadToday();
       }
     });
     ref.onDispose(() {
+      _buildVersion++;
       _generation++;
       _timer?.cancel();
       unawaited(_activitySubscription?.cancel());
       unawaited(_stepSubscription?.cancel());
+      unawaited(repositorySubscription.cancel());
       unawaited(_simulatedActivity?.dispose());
       unawaited(_simulatedSteps?.dispose());
     });
@@ -161,11 +209,13 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
   }
 
   void _ensureTimer() {
-    // An unavailable plugin has no samples to advance. This also keeps the
-    // default provider inert in desktop/widget tests without platform mocks.
+    // Remote sync needs ticks even without sensors. Keep the memory fallback
+    // inert in desktop/widget tests without platform mocks.
     if (_timer == null &&
         _tickInterval != null &&
-        (_simulationClock != null || _detector.phase != DetectorPhase.idle)) {
+        (_repository is SupabaseWorkoutRepository ||
+            _simulationClock != null ||
+            _detector.phase != DetectorPhase.idle)) {
       _timer = Timer.periodic(_tickInterval!, (_) => tick());
     }
   }
@@ -182,27 +232,41 @@ class WorkoutNotifier extends Notifier<WorkoutState> {
     }
     _detector.tick();
     _publish();
+    _loadToday();
+    final now = _realClock();
+    if (_lastRetryAt == null ||
+        now.difference(_lastRetryAt!) >= const Duration(minutes: 1)) {
+      _lastRetryAt = now;
+      unawaited(_repository.retryPending());
+    }
+  }
+
+  void _loadToday() {
+    final now = _detector.clock().toLocal();
+    final day = DateTime(now.year, now.month, now.day);
+    if (_loadedDay == day) return;
+    _loadedDay = day;
+    _lastRetryAt = _realClock();
+    unawaited(
+      _repository.loadRange(day, DateTime(day.year, day.month, day.day + 1)),
+    );
   }
 
   void _publish() {
     for (final event in _detector.takeEvents()) {
       if (event is WorkoutFinished) {
-        _repository.save(event.session);
+        unawaited(_repository.save(event.session));
         _summary = event.session;
       }
     }
     final now = _detector.clock();
-    final today = _repository.sessions
-        .where((session) {
-          final date = session.startedAt.toLocal();
-          final localNow = now.toLocal();
-          return date.year == localNow.year &&
-              date.month == localNow.month &&
-              date.day == localNow.day;
-        })
-        .toList()
-        .reversed
-        .toList();
+    final today = _repository.sessions.where((session) {
+      final date = session.startedAt.toLocal();
+      final localNow = now.toLocal();
+      return date.year == localNow.year &&
+          date.month == localNow.month &&
+          date.day == localNow.day;
+    }).toList()..sort((a, b) => b.startedAt.compareTo(a.startedAt));
     state = WorkoutState(
       now: now,
       phase: _detector.phase,

@@ -38,12 +38,13 @@ Deno.test("export projects identity and connection fields, scopes every table an
         if (table === "profiles") {
           return Promise.resolve(Response.json({ user_id: userId, timezone: "UTC" }));
         }
-        if (table === "daily_metrics") {
+        if (table === "daily_metrics" || table === "workouts") {
           const offset = Number(url.searchParams.get("offset"));
+          const key = table === "workouts" ? "started_at" : "date";
           return Promise.resolve(Response.json(
             offset === 0
-              ? Array.from({ length: 1000 }, (_, i) => ({ date: String(i) }))
-              : [{ date: "last" }],
+              ? Array.from({ length: 1000 }, (_, i) => ({ [key]: String(i) }))
+              : [{ [key]: "last" }],
           ));
         }
         return Promise.resolve(Response.json([{ id: 1 }]));
@@ -66,6 +67,8 @@ Deno.test("export projects identity and connection fields, scopes every table an
     scopes: ["scope"],
   });
   assertEquals(body.daily_metrics.length, 1001);
+  assertEquals(body.workouts.length, 1001);
+  assertEquals(body.workouts.at(-1), { started_at: "last" });
   for (const value of ["private-vault-id", "private-health-id", "private-token", "app_metadata"]) {
     assert(!JSON.stringify(body).includes(value));
   }
@@ -80,6 +83,10 @@ Deno.test("export projects identity and connection fields, scopes every table an
     queries.find((url) => url.pathname.endsWith("coach_messages"))?.searchParams.get("order"),
     "id.asc",
   );
+  assertEquals(
+    queries.find((url) => url.pathname.endsWith("workouts"))?.searchParams.get("order"),
+    "started_at.asc",
+  );
 });
 
 Deno.test("export returns null for an absent connection and requires a session", async () => {
@@ -92,7 +99,9 @@ Deno.test("export returns null for an absent connection and requires a session",
   });
   const response = await handler(request(), { db, userId: () => Promise.resolve(userId) });
   assertEquals(response.status, 200);
-  assertEquals((await response.json()).health_connection, null);
+  const body = await response.json();
+  assertEquals(body.health_connection, null);
+  assertEquals(body.workouts, []);
   assertEquals(
     (await handler(request(), { userId: () => Promise.reject(new HttpError(401, "unauthorized")) }))
       .status,

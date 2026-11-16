@@ -151,7 +151,7 @@ class _WorkoutSettingsSectionState
                   if (state.sensorNotice != null) Text(state.sensorNotice!),
                   const SizedBox(height: 8),
                   Text(
-                    'Workouts and settings are kept for this app session. Detection works while the app is running.',
+                    'Signed-in workouts sync with health consent. Other workouts and settings last for this app session. Detection works while the app is running.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
