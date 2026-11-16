@@ -207,9 +207,12 @@ ThemeData buildTheme(Brightness brightness) {
         )),
     ),
     switchTheme: SwitchThemeData(
-      // An off switch needs a visible track and outline on dark cards.
+      // An off switch needs a visible track and outline on dark cards; when
+      // disabled the outline fades to the M3 default (onSurface at 12%).
       trackOutlineColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.selected) ? Colors.transparent
+              : states.contains(WidgetState.disabled)
+              ? scheme.onSurface.withValues(alpha: 0.12)
               : scheme.outline),
       thumbColor: WidgetStateProperty.resolveWith((states) =>
           states.contains(WidgetState.disabled) ? null
