@@ -14,9 +14,10 @@ class MetricComparison {
   });
   final double? today, usual, delta;
 
-  /// The usual range: the usual plus or minus the same threshold that decides
-  /// steady versus changed, so a value inside it reads as "matched your usual".
-  /// Null while the usual is still being learned.
+  /// The usual range: the 25th–75th percentile of the previous 28 days, never
+  /// narrower than the usual plus or minus the steady threshold, so a steady
+  /// value always lies inside it. Null while the usual is still being learned
+  /// (fewer than seven days).
   final double? low, high;
   final UsualStatus status;
   final int sampleDays;
@@ -62,18 +63,23 @@ UsualSummary calculateUsual(List<DailyMetrics> rows, DateTime today) {
     final enough = values.length >= 7;
     final median = enough ? percentile(values, 0.5) : null;
     final delta = value != null && median != null ? value - median : null;
+    final band = median == null ? null : threshold(median);
     return MetricComparison(
       today: value?.toDouble(),
       usual: median,
       delta: delta,
       sampleDays: values.length,
-      low: median == null ? null : median - threshold(median),
-      high: median == null ? null : median + threshold(median),
+      low: median == null
+          ? null
+          : _min(percentile(values, 0.25), median - band!),
+      high: median == null
+          ? null
+          : _max(percentile(values, 0.75), median + band!),
       status: value == null
           ? UsualStatus.noData
           : !enough
           ? UsualStatus.learning
-          : delta!.abs() <= threshold(median!)
+          : delta!.abs() <= band!
           ? UsualStatus.steady
           : UsualStatus.changed,
     );
@@ -93,3 +99,6 @@ UsualSummary calculateUsual(List<DailyMetrics> rows, DateTime today) {
     ),
   );
 }
+
+double _min(double a, double b) => a < b ? a : b;
+double _max(double a, double b) => a > b ? a : b;
