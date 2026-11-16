@@ -9,6 +9,7 @@ abstract interface class WorkoutRepository {
   List<WorkoutSession> get sessions;
   Stream<void> get changes;
   String? get lastError;
+  String? get loadError;
   Future<void> save(WorkoutSession session);
 
   /// Start times in [from, to), using instants at the local day's boundaries.
@@ -26,6 +27,8 @@ class InMemoryWorkoutRepository implements WorkoutRepository {
   Stream<void> get changes => _changes.stream;
   @override
   String? get lastError => null;
+  @override
+  String? get loadError => null;
   @override
   List<WorkoutSession> get sessions => List.unmodifiable(_sessions);
 
@@ -118,6 +121,8 @@ class SupabaseWorkoutRepository extends InMemoryWorkoutRepository {
 
   @override
   String? get lastError => _saveError ?? _loadError;
+  @override
+  String? get loadError => _loadError;
 
   @override
   Future<void> save(WorkoutSession session) {

@@ -41,6 +41,7 @@ void main() {
       final session = finishedWorkout();
       await repository.save(session);
       expect(repository.lastError, isNotNull);
+      expect(repository.loadError, isNull);
       expect(repository.sessions.single, session);
       expect(store.inserts, hasLength(1));
       store.failInserts = false;
@@ -123,9 +124,11 @@ void main() {
       await repository.loadRange(from, to);
       expect(repository.sessions, hasLength(1));
       expect(repository.lastError, isNotNull);
+      expect(repository.loadError, 'Saved workouts could not be loaded.');
       store.failLoads = false;
       await repository.loadRange(from, to);
       expect(repository.lastError, isNull);
+      expect(repository.loadError, isNull);
     },
   );
 
@@ -141,6 +144,7 @@ void main() {
       await repository.loadRange(from, to);
       expect(repository.sessions.single.steps, 1000);
       expect(repository.lastError, isNotNull);
+      expect(repository.loadError, isNull);
       expect(store.inserts, hasLength(2));
     },
   );
