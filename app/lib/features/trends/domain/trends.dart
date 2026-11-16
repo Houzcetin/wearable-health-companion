@@ -126,7 +126,7 @@ class TrendsData {
       } else {
         final delta = mean - baseline;
         sentence += delta.abs() < (metric == TrendMetric.heart ? 0.05 : 0.5)
-            ? ', matching typical.'
+            ? ', in line with typical.'
             : ', ${metric.differenceLabel(delta)} ${delta < 0 ? 'below' : 'above'} typical.';
       }
     }

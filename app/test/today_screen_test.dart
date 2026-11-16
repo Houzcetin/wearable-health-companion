@@ -56,7 +56,7 @@ void main() {
   testWidgets('learning state counts non-null nights', (tester) async {
     await showToday(tester, FakeHealthRepository(rows: history(nights: 5)));
     expect(
-      find.text('Still learning your usual (5 of 7 nights).'),
+      find.text('Still learning your usual range (5 of 7 nights).'),
       findsOneWidget,
     );
     expect(find.text('6 h 38 min'), findsOneWidget);
@@ -223,13 +223,29 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    // Today is a ListView: off-screen cards are only laid out once scrolled
+    // to, so scroll to the end and check for overflow at every step.
+    Future<void> scrollThrough() async {
+      expect(tester.takeException(), isNull);
+      final list = find.byType(Scrollable).first;
+      ScrollPosition position() =>
+          tester.state<ScrollableState>(list).position;
+      expect(position().maxScrollExtent, greaterThan(0));
+      while (position().pixels < position().maxScrollExtent) {
+        await tester.drag(list, const Offset(0, -150));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+      expect(find.text('Last synced: never'), findsOneWidget);
+    }
+
     await showToday(
       tester,
       FakeHealthRepository(rows: spread(sleepToday: 425, stepsToday: 12345)),
     );
-    expect(tester.takeException(), isNull);
+    await scrollThrough();
     await showToday(tester, FakeHealthRepository(rows: history()));
-    expect(tester.takeException(), isNull);
+    await scrollThrough();
   });
 
   testWidgets('demo data shows before Google Health is connected', (
