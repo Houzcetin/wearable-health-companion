@@ -70,6 +70,25 @@ class LocalWorkoutNotifications implements WorkoutNotificationSink {
   }
 
   @override
+  Future<bool> checkPermission() async {
+    if (!_supported) return false;
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final status = await _plugin
+          .resolvePlatformSpecificImplementation<
+            IOSFlutterLocalNotificationsPlugin
+          >()
+          ?.checkPermissions();
+      return status?.isEnabled == true || status?.isProvisionalEnabled == true;
+    }
+    return await _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.areNotificationsEnabled() ??
+        false;
+  }
+
+  @override
   Future<bool> requestPermission() async {
     if (!_supported) return false;
     if (defaultTargetPlatform == TargetPlatform.iOS) {

@@ -23,6 +23,9 @@ class WorkoutBackfill {
     final candidates = <WorkoutSession>[];
     DateTime? start, end;
     ExerciseType? type;
+    var toleratedUncertainGap = false;
+    var awaitingUncertainReturn = false;
+    final ignored = <ActivitySample>{};
     var checkedThrough = to;
 
     void finish() {
@@ -84,7 +87,8 @@ class WorkoutBackfill {
         while (activityIndex < ordered.length &&
             !ordered[activityIndex].timestamp.isAfter(now)) {
           final sample = ordered[activityIndex++];
-          if (sample.timestamp.isAfter(boutStart) &&
+          if (!ignored.contains(sample) &&
+              sample.timestamp.isAfter(boutStart) &&
               sample.timestamp.isBefore(boutEnd)) {
             detector.addActivity(
               ActivitySample(
@@ -118,8 +122,28 @@ class WorkoutBackfill {
       }
     }
 
-    for (final sample in ordered) {
+    for (var i = 0; i < ordered.length; i++) {
+      final sample = ordered[i];
       final at = sample.timestamp.isBefore(from) ? from : sample.timestamp;
+      // Match Swift: bridge one uncertain record lasting at most two minutes,
+      // only when high-confidence movement resumes with the same exercise.
+      if (type != null &&
+          end == null &&
+          !toleratedUncertainGap &&
+          sample.confidence < config.minConfidence &&
+          i + 1 < ordered.length) {
+        final following = ordered[i + 1];
+        final nextAt = following.timestamp.isBefore(from)
+            ? from
+            : following.timestamp;
+        if (following.confidence >= config.minConfidence &&
+            ExerciseType.fromActivity(following.type) == type &&
+            nextAt.difference(at) <= const Duration(minutes: 2)) {
+          ignored.add(sample);
+          toleratedUncertainGap = true;
+          continue;
+        }
+      }
       // An uncertain interval breaks continuity; the live detector ignores low
       // confidence events, which would otherwise extend old movement forever.
       final next = sample.confidence >= config.minConfidence
@@ -132,14 +156,23 @@ class WorkoutBackfill {
           finish();
           start = at;
           type = next;
+          toleratedUncertainGap = false;
         }
         end = null;
+        awaitingUncertainReturn = false;
       } else if (type != null) {
+        awaitingUncertainReturn =
+            end == null &&
+            !toleratedUncertainGap &&
+            sample.confidence < config.minConfidence;
         end ??= at;
       }
     }
     if (start != null) {
-      if (end != null && to.difference(end) > config.briefGapTolerance) {
+      final tailTolerance = awaitingUncertainReturn
+          ? const Duration(minutes: 2)
+          : config.briefGapTolerance;
+      if (end != null && to.difference(end) > tailTolerance) {
         finish();
       } else {
         // Re-query the unfinished tail next time, including its original onset.

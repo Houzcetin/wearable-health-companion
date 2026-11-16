@@ -161,6 +161,108 @@ void main() {
     expect(workouts.map((w) => w.duration.inMinutes), [15, 5]);
   });
 
+  for (final confidence in [0, 50]) {
+    for (final gapSeconds in [61, 90, 120]) {
+      test(
+        'one uncertain gap of $gapSeconds seconds at confidence $confidence preserves a long walk',
+        () {
+          final gap = at(5);
+          final workout = replay([
+            activity(0, ActivityType.walking),
+            activity(5, ActivityType.walking, confidence: confidence),
+            ActivitySample(
+              type: ActivityType.walking,
+              confidence: 100,
+              timestamp: gap.add(Duration(seconds: gapSeconds)),
+            ),
+            activity(35, ActivityType.still),
+          ]).candidates.single;
+          expect(workout.startedAt, origin);
+          expect(workout.endedAt, at(35));
+          expect(workout.steps, 3500);
+        },
+      );
+    }
+  }
+
+  test('uncertain gaps longer than two minutes split a bout', () {
+    final workouts = replay([
+      activity(0, ActivityType.walking),
+      activity(12, ActivityType.walking, confidence: 50),
+      ActivitySample(
+        type: ActivityType.walking,
+        confidence: 100,
+        timestamp: at(14).add(const Duration(seconds: 1)),
+      ),
+      activity(35, ActivityType.still),
+    ]).candidates;
+    expect(workouts, hasLength(2));
+    expect(workouts.first.endedAt, at(12));
+    expect(workouts.last.startedAt, at(14).add(const Duration(seconds: 1)));
+  });
+
+  test(
+    'an uncertain tail waits two minutes for a same-type return across checks',
+    () {
+      final activities = [
+        activity(0, ActivityType.walking),
+        activity(12, ActivityType.walking, confidence: 50),
+      ];
+      final pending = replay(activities, until: 14);
+      expect(pending.candidates, isEmpty);
+      expect(pending.checkedThrough, origin);
+      final expired = replay(activities, until: 15);
+      expect(expired.candidates.single.endedAt, at(12));
+      expect(expired.checkedThrough, at(15));
+      final returned = replay([
+        ...activities,
+        activity(14, ActivityType.walking),
+        activity(35, ActivityType.still),
+      ]);
+      expect(returned.candidates.single.startedAt, origin);
+      expect(returned.candidates.single.endedAt, at(35));
+    },
+  );
+
+  test('only one extended uncertain gap is tolerated per bout', () {
+    final workouts = replay([
+      activity(0, ActivityType.walking),
+      activity(5, ActivityType.unknown, confidence: 50),
+      activity(7, ActivityType.walking),
+      activity(20, ActivityType.walking, confidence: 50),
+      activity(22, ActivityType.walking),
+      activity(40, ActivityType.still),
+    ]).candidates;
+    expect(workouts.map((w) => w.startedAt), [origin, at(22)]);
+    expect(workouts.map((w) => w.endedAt), [at(20), at(40)]);
+  });
+
+  test('uncertainty before a different exercise still splits bouts', () {
+    final workouts = replay([
+      activity(0, ActivityType.walking),
+      activity(12, ActivityType.walking, confidence: 50),
+      activity(14, ActivityType.running),
+      activity(20, ActivityType.still),
+    ]).candidates;
+    expect(workouts.map((w) => w.type), [ExerciseType.walk, ExerciseType.run]);
+    expect(workouts.map((w) => w.duration.inMinutes), [12, 6]);
+  });
+
+  test(
+    'multiple uncertain records or an unconfirmed tail do not bridge a gap',
+    () {
+      final workouts = replay([
+        activity(0, ActivityType.walking),
+        activity(12, ActivityType.unknown, confidence: 50),
+        activity(13, ActivityType.unknown, confidence: 0),
+        activity(14, ActivityType.walking),
+        activity(30, ActivityType.walking, confidence: 50),
+      ]).candidates;
+      expect(workouts.map((w) => w.startedAt), [origin, at(14)]);
+      expect(workouts.map((w) => w.endedAt), [at(12), at(30)]);
+    },
+  );
+
   test(
     'an ongoing final state is retained for the next resume, not completed',
     () {

@@ -15,13 +15,24 @@ import 'support/motion_history_fake.dart';
 
 class WidgetNotifications implements WorkoutNotificationSink {
   final shown = <WorkoutPromptNotification>[];
-  int cancellations = 0;
+  int cancellations = 0, permissions = 0, checks = 0;
+  bool granted = true;
   late void Function(String, String?) action;
   @override
   Future<void> initialize(void Function(String, String?) onAction) async =>
       action = onAction;
   @override
-  Future<bool> requestPermission() async => true;
+  Future<bool> checkPermission() async {
+    checks++;
+    return granted;
+  }
+
+  @override
+  Future<bool> requestPermission() async {
+    permissions++;
+    return granted;
+  }
+
   @override
   Future<void> show(WorkoutPromptNotification prompt) async =>
       shown.add(prompt);
@@ -91,6 +102,23 @@ void main() {
     now = now.add(duration);
     notifier.tick();
   }
+
+  testWidgets('only the settings notification button requests permission', (
+    tester,
+  ) async {
+    final notifications = WidgetNotifications()..granted = false;
+    await show(tester, settings: true, notifications: notifications);
+    expect(notifications.permissions, 0);
+    final button = find.text('Enable workout notifications');
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(notifications.permissions, 1);
+    expect(
+      find.textContaining('Notifications unavailable or denied'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('cold-start history review saves through the repository', (
     tester,
@@ -169,6 +197,57 @@ void main() {
     expect(container.read(workoutProvider).historyCandidates, isEmpty);
     expect(container.read(workoutProvider).todaySessions, isEmpty);
   });
+
+  testWidgets(
+    'denied background prompt still shows a sheet on resume and rechecks permission',
+    (tester) async {
+      final notifications = WidgetNotifications()..granted = false;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await show(tester, notifications: notifications);
+      activity.emit(ActivityType.running);
+      for (final value in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      advance(const Duration(minutes: 3));
+      await tester.pumpAndSettle();
+      expect(notifications.shown, isEmpty);
+      expect(notifications.permissions, 0);
+      for (final value in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Start run?'), findsOneWidget);
+      final checks = notifications.checks;
+      notifications.granted = true; // Changed in OS settings while resumed.
+      for (final value in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.hidden,
+        AppLifecycleState.paused,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+      expect(notifications.checks, greaterThan(checks));
+      expect(notifications.shown.single.title, 'Start Run?');
+      expect(notifications.permissions, 0);
+      for (final value in [
+        AppLifecycleState.hidden,
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(value);
+      }
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('Today watches fake sources and renders a six minute candidate', (
     tester,

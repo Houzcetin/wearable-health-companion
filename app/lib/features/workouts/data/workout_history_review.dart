@@ -1,4 +1,3 @@
-import '../domain/activity_sample.dart';
 import '../domain/auto_workout_detector.dart';
 import '../domain/workout_backfill.dart';
 import '../domain/workout_session.dart';
@@ -21,6 +20,7 @@ class WorkoutHistoryReview {
   final String owner;
   final WorkoutClock clock;
   final DetectorConfig config;
+  static const maxStepQueriesPerCheck = 48;
   final List<WorkoutSession> candidates = [];
   DateTime? _checkpoint;
   bool _loaded = false;
@@ -58,10 +58,10 @@ class WorkoutHistoryReview {
       await _persist();
       return;
     }
-    // loadRange filters by START time. Include earlier starts as well, so even
-    // an overnight/manual workout crossing our query boundary excludes a bout.
-    await repository.loadRange(DateTime.fromMillisecondsSinceEpoch(0), to);
-    if (repository.lastError != null) {
+    // loadRange filters by start time; workouts last at most 24 hours, so this
+    // also includes any saved workout crossing the review window's boundary.
+    await repository.loadRange(from.subtract(const Duration(hours: 24)), to);
+    if (repository.loadError != null) {
       return; // Retry before advancing the cursor.
     }
     candidates.removeWhere(
@@ -73,32 +73,39 @@ class WorkoutHistoryReview {
     }
     final activities = await source.queryActivities(from, to)
       ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    final boundaries = <DateTime>{
-      from,
-      to,
-      ...activities
-          .map((a) => a.timestamp)
-          .where((t) => t.isAfter(from) && t.isBefore(to)),
-    }.toList()..sort();
-    final steps = <StepSample>[StepSample(count: 0, timestamp: from)];
-    var count = 0;
-    for (var i = 1; i < boundaries.length; i++) {
-      count += (await source.querySteps(
-        boundaries[i - 1],
-        boundaries[i],
-      )).steps;
-      steps.add(StepSample(count: count, timestamp: boundaries[i]));
-    }
+    // Motion alone determines eligible bouts. Query pedometer totals only at
+    // their boundaries, never for idle/uncertain records or saved overlaps.
     final result = WorkoutBackfill(config: config).replay(
       activities: activities,
-      steps: steps,
+      steps: const [],
       from: from,
       to: to,
       existing: [...repository.sessions, ...candidates, ?active],
       weightKg: weightKg,
     );
-    candidates.addAll(result.candidates);
-    _checkpoint = result.checkedThrough;
+    final measured = <WorkoutSession>[];
+    for (final bout in result.candidates.take(maxStepQueriesPerCheck)) {
+      final steps = await source.querySteps(bout.startedAt, bout.endedAt!);
+      measured.add(
+        WorkoutSession(
+          id: bout.id,
+          type: bout.type,
+          startedAt: bout.startedAt,
+          endedAt: bout.endedAt,
+          measuredAt: bout.measuredAt,
+          steps: steps.steps,
+          source: bout.source,
+          weightKg: bout.weightKg,
+          strideMeters: bout.strideMeters,
+        ),
+      );
+    }
+    candidates.addAll(measured);
+    // Keep unqueried bouts available for the next resume if a noisy day hits
+    // the bound. Queries are sequential so only one native request is in flight.
+    _checkpoint = result.candidates.length > maxStepQueriesPerCheck
+        ? result.candidates[maxStepQueriesPerCheck].startedAt
+        : result.checkedThrough;
     await _persist();
   });
 
@@ -108,6 +115,7 @@ class WorkoutHistoryReview {
         if (save &&
             !repository.sessions.any((s) => workoutsOverlap(s, candidate))) {
           await repository.save(candidate);
+          await source.advanceRefreshCursor(candidate.endedAt!);
         }
         candidates.removeWhere((c) => c.id == candidate.id);
         await _persist();

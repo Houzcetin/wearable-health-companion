@@ -19,7 +19,7 @@ class FakeActions implements WorkoutPromptActions {
 
 class FakeNotifications implements WorkoutNotificationSink {
   final shown = <WorkoutPromptNotification>[];
-  int cancellations = 0, permissions = 0;
+  int cancellations = 0, permissions = 0, checks = 0;
   bool granted = true;
   Completer<bool>? permissionGate;
   late void Function(String, String?) action;
@@ -27,9 +27,15 @@ class FakeNotifications implements WorkoutNotificationSink {
   Future<void> initialize(void Function(String, String?) onAction) async =>
       action = onAction;
   @override
+  Future<bool> checkPermission() async {
+    checks++;
+    return permissionGate?.future ?? granted;
+  }
+
+  @override
   Future<bool> requestPermission() async {
     permissions++;
-    return permissionGate?.future ?? granted;
+    return granted;
   }
 
   @override
@@ -93,6 +99,7 @@ void main() {
       expect(sink.shown.last.title, 'Stop workout?');
       await update(stop: stop, at: stop.deadline);
       expect(sink.cancellations, before + 2);
+      expect(sink.permissions, 0);
     },
   );
   test(
@@ -167,17 +174,20 @@ void main() {
     },
   );
   test(
-    'denial degrades gracefully and does not repeatedly ask on ticks',
+    'denial skips silently; permission is rechecked after resume without asking',
     () async {
       sink.granted = false;
       await update(start: start);
       await update(start: start);
       expect(sink.shown, isEmpty);
-      expect(sink.permissions, 1);
+      expect(sink.checks, 2);
+      expect(sink.permissions, 0);
+      await update(resumed: true, start: start);
       sink.granted = true;
-      expect(await bridge.requestPermission(), isTrue);
       await update(start: start);
       expect(sink.shown, hasLength(1));
+      expect(sink.checks, 3);
+      expect(sink.permissions, 0);
     },
   );
 }

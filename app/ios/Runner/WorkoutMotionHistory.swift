@@ -11,6 +11,19 @@ final class WorkoutMotionHistory {
   private let pedometer = CMPedometer()
   private let defaults = UserDefaults.standard
   private var channel: FlutterMethodChannel?
+  private var workoutRevision = 0
+
+  private func advanceRefreshCursor(_ through: Date) {
+    let existing = defaults.object(forKey: "workouts.refresh.checked") as? Date ?? .distantPast
+    defaults.set(max(existing, through), forKey: "workouts.refresh.checked")
+  }
+
+  private func workoutChanged() {
+    workoutRevision += 1
+    let center = UNUserNotificationCenter.current()
+    center.removePendingNotificationRequests(withIdentifiers: ["workouts.history"])
+    center.removeDeliveredNotifications(withIdentifiers: ["workouts.history"])
+  }
 
   func openReview() {
     defaults.set(true, forKey: "workouts.history.open")
@@ -71,6 +84,21 @@ final class WorkoutMotionHistory {
           BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.refreshID)
           UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["workouts.history"])
         }
+        result(nil)
+      case "advanceRefreshCursor":
+        if let ms = args["through"] as? NSNumber {
+          self.advanceRefreshCursor(Date(timeIntervalSince1970: ms.doubleValue / 1000))
+          self.workoutChanged()
+        }
+        result(nil)
+      case "setActiveWorkout":
+        if let from = args["from"] as? NSNumber, let through = args["through"] as? NSNumber {
+          self.defaults.set(Date(timeIntervalSince1970: from.doubleValue / 1000), forKey: "workouts.refresh.active")
+          self.advanceRefreshCursor(Date(timeIntervalSince1970: through.doubleValue / 1000))
+        } else {
+          self.defaults.removeObject(forKey: "workouts.refresh.active")
+        }
+        self.workoutChanged()
         result(nil)
       default: result(FlutterMethodNotImplemented)
       }
@@ -135,59 +163,96 @@ final class WorkoutMotionHistory {
     let to = Date()
     let last = defaults.object(forKey: "workouts.refresh.checked") as? Date ?? to.addingTimeInterval(-86400)
     let from = max(last, to.addingTimeInterval(-86400))
+    guard from < to else { finish(true); return }
+    let revision = workoutRevision
     queryActivities(from: from, to: to) { [weak self] rows, error in
       guard let self = self, !completed else { return }
+      guard revision == self.workoutRevision else { finish(true); return }
       guard error == nil else { finish(false); return }
       // Mirror default detector minimums (walk 10m, run 3m, bike 5m),
       // only high confidence. State records persist until the next record.
       var kind: String?
       var start: Date?
       var end: Date?
-      var found: (String, Int)?
+      var found: [(String, Int)] = []
+      var toleratedUncertainGap = false
+      var awaitingUncertainReturn = false
       func collect() {
         guard let kind = kind, let start = start, let end = end else { return }
         let seconds = end.timeIntervalSince(start)
         let minimum: TimeInterval = kind == "walked" ? 600 : (kind == "ran" ? 180 : 300)
-        if seconds >= minimum { found = (kind, Int(seconds / 60)) }
+        // An active workout continues through suspension, beyond the last Dart
+        // snapshot. Dart clears this marker on finish or a fresh process start.
+        let active = self.defaults.object(forKey: "workouts.refresh.active") as? Date
+        if seconds >= minimum && (active == nil || end <= active!) {
+          found.append((kind, Int(seconds / 60)))
+        }
       }
-      for row in rows {
+      func exercise(_ row: [String: Any]) -> String? {
+        guard (row["confidence"] as? Int) == 2 && (row["automotive"] as? Bool) != true else { return nil }
+        if row["running"] as? Bool == true { return "ran" }
+        if row["cycling"] as? Bool == true { return "cycled" }
+        if row["walking"] as? Bool == true { return "walked" }
+        return nil
+      }
+      let ordered = rows.sorted { ($0["start"] as? Double ?? 0) < ($1["start"] as? Double ?? 0) }
+      for (index, row) in ordered.enumerated() {
         guard let ms = row["start"] as? Double else { continue }
         let at = max(Date(timeIntervalSince1970: ms / 1000), from)
-        var next: String?
-        if (row["confidence"] as? Int) == 2 && (row["automotive"] as? Bool) != true {
-          if row["running"] as? Bool == true { next = "ran" }
-          else if row["cycling"] as? Bool == true { next = "cycled" }
-          else if row["walking"] as? Bool == true { next = "walked" }
+        // Match Dart: tolerate one medium/low record <= 2 minutes only when
+        // followed immediately by high-confidence movement of the same type.
+        if kind != nil && end == nil && !toleratedUncertainGap,
+           (row["confidence"] as? Int ?? 0) < 2, index + 1 < ordered.count,
+           let nextMS = ordered[index + 1]["start"] as? Double,
+           exercise(ordered[index + 1]) == kind,
+           max(Date(timeIntervalSince1970: nextMS / 1000), from).timeIntervalSince(at) <= 120 {
+          toleratedUncertainGap = true
+          continue
         }
+        let next = exercise(row)
         if let next = next {
           if kind != next || (end != nil && at.timeIntervalSince(end!) > 60) {
             if kind != nil && end == nil { end = at }
             collect()
             start = at
             kind = next
+            toleratedUncertainGap = false
           }
           end = nil
-        } else if kind != nil && end == nil { end = at }
+          awaitingUncertainReturn = false
+        } else if kind != nil {
+          awaitingUncertainReturn = end == nil && !toleratedUncertainGap && (row["confidence"] as? Int ?? 0) < 2
+          if end == nil { end = at }
+        }
       }
-      if let end = end, to.timeIntervalSince(end) > 60 { collect() }
+      let tailTolerance: TimeInterval = awaitingUncertainReturn ? 120 : 60
+      if let end = end, to.timeIntervalSince(end) > tailTolerance { collect() }
       // Keep an ongoing tail for the next refresh. This cursor is separate
       // from Dart's review cursor: a reminder must never consume a suggestion.
-      let tailOpen = end == nil || to.timeIntervalSince(end!) <= 60
-      self.defaults.set(tailOpen ? (start ?? to) : to, forKey: "workouts.refresh.checked")
-      guard let found = found else { finish(true); return }
+      let tailOpen = end == nil || to.timeIntervalSince(end!) <= tailTolerance
+      self.advanceRefreshCursor(tailOpen ? (start ?? to) : to)
+      guard !found.isEmpty else { finish(true); return }
       UNUserNotificationCenter.current().getNotificationSettings { settings in
         DispatchQueue.main.async {
-          guard !completed, self.defaults.bool(forKey: "workouts.refresh.enabled") else { finish(true); return }
+          guard !completed, revision == self.workoutRevision,
+                self.defaults.bool(forKey: "workouts.refresh.enabled") else { finish(true); return }
           guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
             finish(true); return // Never ask permission in a background task.
           }
           let content = UNMutableNotificationContent()
-          content.title = "Looks like you \(found.0) \(found.1) min — tap to log it"
-          content.body = "Review your recent workout in the app."
+          content.title = found.count > 1
+            ? "\(found.count) activities to review"
+            : "Looks like you \(found[0].0) \(found[0].1) min — tap to log it"
+          content.body = "Review your recent activities in the app."
           content.sound = .default
           let request = UNNotificationRequest(identifier: "workouts.history", content: content, trigger: nil)
           UNUserNotificationCenter.current().add(request) { error in
-            DispatchQueue.main.async { finish(error == nil) }
+            DispatchQueue.main.async {
+              if revision != self.workoutRevision {
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["workouts.history"])
+              }
+              finish(error == nil)
+            }
           }
         }
       }

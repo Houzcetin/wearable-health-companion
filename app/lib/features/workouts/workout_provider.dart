@@ -160,6 +160,8 @@ class WorkoutNotifier extends Notifier<WorkoutState>
   bool _resumed = true;
   String? _historyNotice;
   DateTime? _lastDetectorAdvance;
+  DateTime? _nativeCursor, _nativeActiveStart, _nativeActiveThrough;
+  bool _nativeActiveInitialized = false;
 
   @override
   WorkoutState build() {
@@ -187,6 +189,8 @@ class WorkoutNotifier extends Notifier<WorkoutState>
         binding?.lifecycleState == AppLifecycleState.resumed;
     _historyNotice = null;
     _lastDetectorAdvance = _realClock();
+    _nativeCursor = _nativeActiveStart = _nativeActiveThrough = null;
+    _nativeActiveInitialized = false;
     _notifications = WorkoutNotificationBridge(
       sink: ref.read(workoutNotificationSinkProvider),
       actions: this,
@@ -206,6 +210,10 @@ class WorkoutNotifier extends Notifier<WorkoutState>
             onStateChange: (value) {
               if (!ref.mounted || version != _buildVersion) return;
               _resumed = value == AppLifecycleState.resumed;
+              if (_resumed) {
+                _nativeCursor = null;
+                _nativeActiveInitialized = false;
+              }
               // A cached movement state cannot prove that activity continued
               // while Dart was suspended. Let history handle that missing period.
               if (_detector.phase == DetectorPhase.candidate &&
@@ -345,6 +353,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
       }
     }
     final now = _detector.clock();
+    _syncNativeWorkouts(_detector.currentSession);
     final today = _repository.sessions.where((session) {
       final date = session.startedAt.toLocal();
       final localNow = now.toLocal();
@@ -389,12 +398,49 @@ class WorkoutNotifier extends Notifier<WorkoutState>
   }
 
   Future<void> requestNotificationPermission() async {
-    final granted = await _notifications.requestPermission();
+    var granted = false;
+    try {
+      await _notifications.initialize();
+      granted = await ref
+          .read(workoutNotificationSinkProvider)
+          .requestPermission();
+    } catch (_) {
+      // Unavailable plugins use the same settings notice as a denial.
+    }
     if (!ref.mounted) return;
     _historyNotice = granted
         ? 'Workout notifications enabled.'
         : 'Notifications unavailable or denied. You can enable them in your phone settings.';
     _publish();
+  }
+
+  void _syncNativeWorkouts(WorkoutSession? active) {
+    final source = _history.source;
+    if (!source.available) return;
+    // Simulator time can run ahead of wall time; it must not consume real
+    // motion history or leave a native active-workout marker behind.
+    if (_simulationClock != null) active = null;
+    if (!_nativeActiveInitialized ||
+        _nativeActiveStart != active?.startedAt ||
+        _nativeActiveThrough != active?.measuredAt) {
+      _nativeActiveInitialized = true;
+      _nativeActiveStart = active?.startedAt;
+      _nativeActiveThrough = active?.measuredAt;
+      unawaited(source.setActiveWorkout(active).catchError((Object _) {}));
+    }
+    if (_simulationClock != null) return;
+    DateTime? through = active?.measuredAt;
+    for (final session in [..._repository.sessions, ?_summary]) {
+      final end = session.endedAt;
+      if (end != null && (through == null || end.isAfter(through))) {
+        through = end;
+      }
+    }
+    if (through != null &&
+        (_nativeCursor == null || through.isAfter(_nativeCursor!))) {
+      _nativeCursor = through;
+      unawaited(source.advanceRefreshCursor(through).catchError((Object _) {}));
+    }
   }
 
   void _openWorkouts() {

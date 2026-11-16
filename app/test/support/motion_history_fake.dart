@@ -1,11 +1,17 @@
 import 'package:wearable_companion/features/workouts/data/motion_history_source.dart';
 import 'package:wearable_companion/features/workouts/domain/activity_sample.dart';
+import 'package:wearable_companion/features/workouts/domain/workout_session.dart';
 
 class FakeMotionHistory extends MotionHistorySource {
   FakeMotionHistory(this.origin) : super(available: true);
   final DateTime origin;
   final stored = <String, Map<String, dynamic>>{};
   final ranges = <(DateTime, DateTime)>[];
+  final stepRanges = <(DateTime, DateTime)>[];
+  final cursorAdvances = <DateTime>[];
+  final activeWorkouts = <WorkoutSession?>[];
+  DateTime? refreshCursor;
+  int stepQueriesInFlight = 0, maxConcurrentStepQueries = 0;
   bool fail = false;
   @override
   void onOpen(void Function()? callback) {}
@@ -22,6 +28,20 @@ class FakeMotionHistory extends MotionHistorySource {
 
   @override
   Future<void> configure({required bool enabled}) async {}
+  @override
+  Future<void> advanceRefreshCursor(DateTime through) async {
+    cursorAdvances.add(through);
+    if (refreshCursor == null || through.isAfter(refreshCursor!)) {
+      refreshCursor = through;
+    }
+  }
+
+  @override
+  Future<void> setActiveWorkout(WorkoutSession? session) async {
+    activeWorkouts.add(session);
+    if (session != null) await advanceRefreshCursor(session.measuredAt);
+  }
+
   @override
   Future<List<ActivitySample>> queryActivities(
     DateTime from,
@@ -50,6 +70,13 @@ class FakeMotionHistory extends MotionHistorySource {
 
   @override
   Future<HistorySteps> querySteps(DateTime from, DateTime to) async {
+    stepRanges.add((from, to));
+    stepQueriesInFlight++;
+    if (stepQueriesInFlight > maxConcurrentStepQueries) {
+      maxConcurrentStepQueries = stepQueriesInFlight;
+    }
+    await Future<void>.delayed(Duration.zero);
+    stepQueriesInFlight--;
     final start = from.isBefore(origin) ? origin : from;
     final end = to.isAfter(origin.add(const Duration(minutes: 35)))
         ? origin.add(const Duration(minutes: 35))

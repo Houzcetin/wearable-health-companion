@@ -24,13 +24,14 @@ class WorkoutPromptNotification {
 
 abstract interface class WorkoutNotificationSink {
   Future<void> initialize(void Function(String action, String? key) onAction);
+  Future<bool> checkPermission();
   Future<bool> requestPermission();
   Future<void> show(WorkoutPromptNotification prompt);
   Future<void> cancel();
 }
 
 /// No plugin or Riverpod dependency: the bridge always checks the latest prompt
-/// after async permission requests, and rejects actions from old notifications.
+/// after async permission checks, and rejects actions from old notifications.
 class WorkoutNotificationBridge {
   WorkoutNotificationBridge({
     required this.sink,
@@ -45,7 +46,6 @@ class WorkoutNotificationBridge {
   WorkoutPromptNotification? _desired;
   String? _shown;
   bool _disposed = false;
-  bool? _permission;
   Future<void>? _initialization;
   Future<void> _queue = Future.value();
 
@@ -53,15 +53,6 @@ class WorkoutNotificationBridge {
     await sink.initialize(handleAction);
     await sink.cancel(); // Clear live prompts left by a terminated process.
   }();
-
-  Future<bool> requestPermission() async {
-    try {
-      await initialize();
-      return _permission = await sink.requestPermission();
-    } catch (_) {
-      return false;
-    }
-  }
 
   Future<void> update({
     required bool resumed,
@@ -104,8 +95,10 @@ class WorkoutNotificationBridge {
       _shown = null;
     }
     if (desired == null) return;
-    _permission ??= await sink.requestPermission();
-    if (!_permission! || _disposed || _desired?.key != desired.key) {
+    // Never prompt here, and never retain a denial across resumes/settings
+    // changes. The settings button is the only permission request path.
+    final permitted = await sink.checkPermission();
+    if (!permitted || _disposed || _desired?.key != desired.key) {
       return;
     }
     await sink.show(desired);

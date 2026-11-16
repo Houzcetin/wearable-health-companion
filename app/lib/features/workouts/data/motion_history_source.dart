@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/activity_sample.dart';
+import '../domain/workout_session.dart';
 
 class HistorySteps {
   const HistorySteps(this.steps, {this.distance});
@@ -111,6 +112,27 @@ class MotionHistorySource {
   Future<void> configure({required bool enabled}) async {
     if (available) {
       await channel.invokeMethod<void>('configure', {'enabled': enabled});
+    }
+  }
+
+  /// Separate from the review checkpoint: saving must suppress native reminders
+  /// without consuming other in-app suggestions. Native code applies max().
+  Future<void> advanceRefreshCursor(DateTime through) async {
+    if (available) {
+      await channel.invokeMethod<void>('advanceRefreshCursor', {
+        'through': through.millisecondsSinceEpoch,
+      });
+    }
+  }
+
+  Future<void> setActiveWorkout(WorkoutSession? session) async {
+    if (available) {
+      await channel.invokeMethod<void>('setActiveWorkout', {
+        if (session != null) ...{
+          'from': session.startedAt.millisecondsSinceEpoch,
+          'through': session.measuredAt.millisecondsSinceEpoch,
+        },
+      });
     }
   }
 }

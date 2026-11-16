@@ -5,8 +5,10 @@ The feature's `AppLifecycleListener` routes unresolved prompts to local
 notifications whenever the app is not resumed, and to the existing sheets when
 it resumes. Actions open the main isolate and call the same `WorkoutNotifier`
 methods as the sheets. Prompt identifiers reject stale actions. Nothing requests
-notification permission at launch: initialization disables all permission flags;
-the first background prompt or the settings button requests permission.
+notification permission implicitly: initialization disables all permission flags;
+only the “Enable workout notifications” settings button requests permission.
+The bridge checks current iOS/Android authorization without prompting, retains no
+denial cache, and silently skips a notification without affecting the resume sheet.
 Notification body taps select Today without changing the router configuration;
 native refresh taps persist an open request until Dart can consume it.
 
@@ -18,10 +20,17 @@ or extra preferences dependency is added.
 On iPhone, `MotionHistorySource` queries CoreMotion over a method channel
 registered through the implicit engine's plugin registrar. History checks run on
 cold start and resume, capped at 24 hours. Only high CoreMotion confidence maps to
-100; medium maps to 50 and low to 0. Uncertain/unknown/automotive intervals break
-continuity. Gaps over the detector's 60-second tolerance and exercise changes
-split bouts. Each bout replays ordered motion and interval step totals through a
-fresh `AutoWorkoutDetector` using a fake clock and the normal duration thresholds.
+100; medium maps to 50 and low to 0. One medium/low confidence record lasting at
+most two minutes is tolerated inside a bout only if the immediately following
+record is high confidence and the same exercise type. Both Dart and Swift apply
+this rule, retaining an uncertain tail for up to two minutes across checks.
+Other gaps over the detector's 60-second tolerance and exercise changes split
+bouts. Each bout replays ordered motion through a fresh `AutoWorkoutDetector`
+using a fake clock and the normal duration thresholds.
+Step totals are queried sequentially only for eligible completed bout boundaries,
+up to 48 per check; excess bouts retain their cursor for a later check. Idle,
+uncertain, short, unfinished, and already saved/active overlapping bouts need no
+pedometer queries.
 Completed bouts become reviews, never automatic saves. Distance continues to use
 the app's stride estimate; the native channel also exposes recorded distance.
 
@@ -34,19 +43,25 @@ their existing app-session lifetime. A stale, unconfirmed live candidate is
 reset after a suspension gap; history supplies the missing period.
 
 History loads repository workouts before excluding overlaps. Because the
-repository's range API filters *start* times, the overlap check loads all earlier
-starts, including overnight workouts crossing the query boundary. This may need
-a dedicated overlap query if workout history becomes large. Accepted reviews use
-`WorkoutRepository.save` with a stable candidate ID and `source: auto`; existing
-cache, change stream and retry behavior are unchanged. A repository load failure
-or motion error does not advance the history checkpoint.
+repository's range API filters *start* times and workouts last at most 24 hours,
+the overlap check loads from 24 hours before the review window through its end.
+Accepted reviews use `WorkoutRepository.save` with a stable candidate ID and
+`source: auto`; existing cache, change stream and retry behavior are unchanged.
+A repository load failure
+or motion error does not advance the history checkpoint. A separate `loadError`
+allows review checks to proceed while a cached save awaits a sync retry.
 
 The native `BGAppRefreshTask` independently checks up to 24 hours of motion and
 may post “Looks like you walked 35 min — tap to log it”. Its cursor is separate
 from the Dart review cursor, so a reminder never consumes a review. It checks
 existing authorization and never requests permission or saves a workout. Native
-reminders use the default minimums: walk 10, run 3, bike 5 minutes. They are hints
-and can refer to an already saved workout; Dart checks overlaps when opened.
+reminders use the default minimums: walk 10, run 3, bike 5 minutes. Multiple
+completed bouts produce “2 activities to review” (with the actual count).
+Dart saves and live workout snapshots advance `workouts.refresh.checked` to the
+maximum of its existing value and the workout end/measurement time. An active
+workout marker excludes overlapping bouts even while Dart is suspended; it clears
+on finish or a new Dart process. In-flight reminders are suppressed if workout
+state changes, and refresh never moves the cursor backward.
 iOS decides when, or whether, to run a refresh. The earliest requested time is an
 hour away, and Background App Refresh settings and force quitting affect delivery.
 See [Apple's background task guidance](https://developer.apple.com/documentation/uikit/using-background-tasks-to-update-your-app).
@@ -66,7 +81,7 @@ corresponding runtime permissions and battery/background restrictions handled.
 
 ## Real iPhone verification (requires Xcode; not verified in this workspace)
 
-Workspace validation: `flutter test` passed all 210 tests;
+Workspace validation: `flutter test` passed all 246 tests;
 `flutter analyze --no-fatal-infos` passed with zero errors/warnings (SDK
 deprecation infos remain). The analyzer used
 `ANALYZER_STATE_LOCATION_OVERRIDE=/root/.cache/workout-analyzer` because this
@@ -75,9 +90,11 @@ workspace cannot write its default cache under `/root/.dartServer`.
 1. Build/install the Runner target. Verify the new Swift source is compiled,
    the method channel registers with the implicit engine, `fetch` appears in
    Background Modes, and the permitted refresh identifier matches the code.
-2. Fresh install: verify no notification permission prompt at launch. Test the
-   settings permission button, allow/deny, and enabling notifications later in
-   iOS Settings. Also allow/deny Motion & Fitness and verify retry on resume.
+2. Fresh install: verify no notification permission prompt at launch or from a
+   background start/stop prompt. A denied prompt must still show its sheet on
+   resume. Test the settings permission button, allow/deny, and enabling
+   notifications later in iOS Settings. Also allow/deny Motion & Fitness and
+   verify retry on resume.
 3. With permission granted and a live/simulated candidate, leave the app before
    the start/stop prompt. Verify both notification titles and all four actions,
    body taps opening the existing sheet, movement cancellation, timeouts and
@@ -96,6 +113,14 @@ workspace cannot write its default cache under `/root/.dartServer`.
    rescheduling, no permission dialog, the reminder for a completed bout, and
    tapping it showing the Dart review. Observe best-effort delivery on hardware
    without the debugger, including Background App Refresh disabled.
+7. Inspect `workouts.refresh.checked` after saving a review and finishing a live
+   workout. Saving an older workout or completing an in-flight refresh must not
+   move it backward. During an active workout, simulate refresh and verify no
+   overlapping reminder. Start a refresh, then save/finish before it returns;
+   verify no stale reminder. Two completed, unsaved bouts must use the plural
+   reminder. Compare Dart and native results for one 90/120-second medium/low
+   record inside a walk, a 121-second gap, repeated uncertain records and a change
+   of exercise type.
 
 Android also needs a device build and API 33+ permission/action/body-tap checks;
 native platform builds and OS notification delivery were not run here.
