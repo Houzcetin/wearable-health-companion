@@ -24,7 +24,7 @@ void main() {
     await startStage5(tester, screen: const TrendsScreen(),
       health: FakeHealthRepository(rows: trendRows()));
     expect(find.text('This week you averaged 7 h 00 min of sleep, '
-      '30 min below your usual.'), findsOneWidget);
+      '30 min below typical.'), findsOneWidget);
     final chart = tester.widget<BarChart>(find.byType(BarChart));
     expect(chart.data.extraLinesData.horizontalLines.single.y, 7.5);
     expect(chart.data.extraLinesData.horizontalLines.single.dashArray, [6, 4]);

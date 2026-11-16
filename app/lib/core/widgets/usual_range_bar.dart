@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// A horizontal track showing the usual range (a tinted band), the usual
-/// value (a tick) and today's value (a dot). Decorative: callers describe the
+/// A horizontal track showing the usual range (a tinted band), the typical
+/// value (a tick, the 28-day median) and today's value (a dot). Decorative: callers describe the
 /// same numbers in text, so the bar is excluded from semantics.
 class UsualRangeBar extends StatelessWidget {
   const UsualRangeBar({
@@ -13,14 +13,17 @@ class UsualRangeBar extends StatelessWidget {
     required this.low,
     required this.high,
     required this.color,
-    required this.tint,
   });
+  /// [usual] is the typical value (median); [low]–[high] the usual range.
   final double value, usual, low, high;
-  final Color color, tint;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // Stronger than the icon tint so the band reads against the grey track.
+    final band = Color.alphaBlend(
+      color.withValues(alpha: 0.3), scheme.surfaceContainerLowest);
     var lo = math.min(math.min(low, value), usual);
     var hi = math.max(math.max(high, value), usual);
     final spread = hi - lo;
@@ -49,7 +52,7 @@ class UsualRangeBar extends StatelessWidget {
                 width: math.max((at(high) - at(low)) * width, 4),
                 top: 4, height: 8,
                 child: DecoratedBox(decoration: BoxDecoration(
-                  color: tint,
+                  color: band,
                   borderRadius: BorderRadius.circular(4),
                 )),
               ),

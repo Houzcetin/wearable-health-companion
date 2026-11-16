@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_card.dart';
 import '../domain/activity_sample.dart';
 import '../workout_provider.dart';
 import 'workout_sheets.dart';
@@ -41,11 +42,16 @@ class _WorkoutSettingsSectionState
     final state = ref.watch(workoutProvider);
     final notifier = ref.read(workoutProvider.notifier);
     return WorkoutPromptHost(
-      child: Card(
+      child: AppCard(
+        padding: EdgeInsets.zero,
         child: ExpansionTile(
+          leading: Icon(
+            Icons.directions_run,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
           title: Text(
             'Workout detection',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: Theme.of(context).textTheme.titleSmall,
           ),
           children: [
             Padding(
