@@ -434,7 +434,7 @@ String _duration(int minutes) =>
 String _sleepInsight(MetricComparison sleep) => switch (sleep.status) {
   UsualStatus.noData => 'No sleep data for last night.',
   UsualStatus.learning =>
-    'Still learning your usual (${sleep.sampleDays} of 7 nights).',
+    'Still learning your usual range (${sleep.sampleDays} of 7 nights).',
   UsualStatus.steady => 'Your sleep was within your usual range.',
   UsualStatus.changed =>
     'You slept ${_delta(sleep.delta!)} min ${sleep.delta! < 0 ? 'less' : 'more'} than typical.',
@@ -445,7 +445,7 @@ String _comparison(
 ) => switch (metric.status) {
   UsualStatus.noData => 'No data today',
   UsualStatus.learning =>
-    'Learning your usual (${metric.sampleDays} of 7 days)',
+    'Learning your usual range (${metric.sampleDays} of 7 days)',
   UsualStatus.steady => metric.delta!.round() == 0
       ? 'In your usual range'
       : 'In your usual range (${_delta(metric.delta!)} $unit '
