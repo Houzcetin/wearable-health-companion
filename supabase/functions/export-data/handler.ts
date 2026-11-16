@@ -23,11 +23,12 @@ export async function handler(req: Request, deps: Dependencies = {}): Promise<Re
   try {
     const userId = await (deps.userId ?? requireUserId)(req);
     const db = deps.db ?? createServiceClient();
-    const rows = async (table: string, order: string) => {
+    const rows = async (table: string, order: string, secondaryOrder?: string) => {
       const all: Record<string, unknown>[] = [];
       for (let offset = 0;; offset += 1000) {
-        const result = await db.from(table).select("*").eq("user_id", userId)
-          .order(order).range(offset, offset + 999);
+        let query = db.from(table).select("*").eq("user_id", userId).order(order);
+        if (secondaryOrder) query = query.order(secondaryOrder);
+        const result = await query.range(offset, offset + 999);
         check(result.error);
         const page = (result.data ?? []) as Record<string, unknown>[];
         all.push(...page);
@@ -42,7 +43,7 @@ export async function handler(req: Request, deps: Dependencies = {}): Promise<Re
       rows("consent_events", "id"),
       rows("daily_metrics", "date"),
       rows("coach_messages", "id"),
-      rows("workouts", "started_at"),
+      rows("workouts", "started_at", "id"),
     ]);
     check(user.error);
     check(profile.error);
