@@ -58,7 +58,9 @@ double _median(List<int> v) {
 double _round(double v) => (v * 10).round() / 10;
 
 /// A `compare_periods` tool result built from the demo rows: the last 7 days
-/// against the 28 days before them, for sleep.
+/// (including today) against the 28 days before today. That baseline is the
+/// same window Today and Trends use for "typical" (the median), so the coach
+/// and the cards quote one number.
 Map<String, dynamic> _sleepComparison(DateTime today) {
   final rows = demoRows(today);
   List<DailyMetrics> between(int fromAgo, int toAgo) => rows
@@ -67,7 +69,7 @@ Map<String, dynamic> _sleepComparison(DateTime today) {
         return ago >= toAgo && ago <= fromAgo;
       })
       .toList();
-  final a = between(6, 0), b = between(34, 7);
+  final a = between(6, 0), b = between(28, 1);
   Map<String, dynamic> period(List<DailyMetrics> p) {
     final v = [for (final r in p) r.sleepMinutes!];
     return {
@@ -78,11 +80,11 @@ Map<String, dynamic> _sleepComparison(DateTime today) {
     };
   }
 
-  final meanB = _mean([for (final r in b) r.sleepMinutes!]);
+  final typicalB = _median([for (final r in b) r.sleepMinutes!]);
   final contributors = [...a]
     ..sort(
-      (x, y) => (y.sleepMinutes! - meanB).abs().compareTo(
-        (x.sleepMinutes! - meanB).abs(),
+      (x, y) => (y.sleepMinutes! - typicalB).abs().compareTo(
+        (x.sleepMinutes! - typicalB).abs(),
       ),
     );
   return {
@@ -105,8 +107,8 @@ Map<String, dynamic> _compareFacts(DateTime today) => {
         'metric': 'sleep_minutes',
         'a_start': _dateKey(_date(today, 6)),
         'a_end': _dateKey(_date(today, 0)),
-        'b_start': _dateKey(_date(today, 34)),
-        'b_end': _dateKey(_date(today, 7)),
+        'b_start': _dateKey(_date(today, 28)),
+        'b_end': _dateKey(_date(today, 1)),
       },
       'result': _sleepComparison(today),
     },
@@ -142,8 +144,9 @@ const demoThreadId = 'demo-thread';
 
 /// Two prepared questions with answers, shown as the coach's saved history.
 List<CoachMessage> demoCoachHistory(DateTime today) {
-  final a = _sleepComparison(today)['a'] as Map<String, dynamic>;
-  final b = _sleepComparison(today)['b'] as Map<String, dynamic>;
+  final comparison = _sleepComparison(today);
+  final a = comparison['a'] as Map<String, dynamic>;
+  final b = comparison['b'] as Map<String, dynamic>;
   String hm(num minutes) =>
       '${minutes.round() ~/ 60} h ${(minutes.round() % 60).toString().padLeft(2, '0')} min';
   return [
@@ -157,8 +160,8 @@ List<CoachMessage> demoCoachHistory(DateTime today) {
       role: 'assistant',
       content:
           'This is a demo answer. In the sample data you averaged '
-          '${hm(a['mean'] as num)} over the last 7 nights against '
-          '${hm(b['mean'] as num)} over the 28 nights before. '
+          '${hm(a['mean'] as num)} over the last 7 nights, against a typical '
+          '${hm(b['median'] as num)} over the 28 nights before. '
           'The numbers behind it are listed under Numbers used.',
       facts: _compareFacts(today),
       isDemo: true,
