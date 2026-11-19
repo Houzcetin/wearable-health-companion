@@ -1,0 +1,4 @@
+// Copy to Google.xcconfig (git-ignored) and replace both placeholders.
+// Use the same iOS client ID in the GOOGLE_IOS_CLIENT_ID Dart define.
+GOOGLE_IOS_CLIENT_ID = YOUR_IOS_CLIENT_ID.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.YOUR_IOS_CLIENT_ID
