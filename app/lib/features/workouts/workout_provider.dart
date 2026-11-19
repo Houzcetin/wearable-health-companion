@@ -192,6 +192,7 @@ final workoutProvider = NotifierProvider<WorkoutNotifier, WorkoutState>(
 
 class WorkoutNotifier extends Notifier<WorkoutState>
     implements WorkoutPromptActions {
+  static const _simulatorTickInterval = Duration(seconds: 4);
   late AutoWorkoutDetector _detector;
   late WorkoutClock _realClock;
   late WorkoutRepository _repository;
@@ -360,7 +361,10 @@ class WorkoutNotifier extends Notifier<WorkoutState>
         (_repository is SupabaseWorkoutRepository ||
             _simulationClock != null ||
             _detector.phase != DetectorPhase.idle)) {
-      _timer = Timer.periodic(_tickInterval!, (_) => tick());
+      _timer = Timer.periodic(
+        _simulationClock == null ? _tickInterval! : _simulatorTickInterval,
+        (_) => tick(),
+      );
     }
   }
 
@@ -368,7 +372,7 @@ class WorkoutNotifier extends Notifier<WorkoutState>
     _lastDetectorAdvance = _realClock();
     final simulation = _simulationClock;
     if (simulation != null) {
-      final elapsed = _tickInterval ?? const Duration(seconds: 15);
+      const elapsed = _simulatorTickInterval;
       simulation.advance(elapsed);
       _simulatedSteps!.advance(
         _simulatedActivity!.type,

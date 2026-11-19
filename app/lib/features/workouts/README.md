@@ -39,9 +39,10 @@ uncertain, short, unfinished, and already saved/active overlapping bouts need no
 pedometer queries.
 Completed bouts become reviews, never automatic saves. Distance continues to use
 the app's stride estimate; the native channel also exposes recorded distance.
-When a review has zero steps (including an unavailable pedometer), its card says
+When a walk/run review has zero steps (including an unavailable pedometer), its card says
 “Steps unavailable” and shows no step, distance or calorie totals. Save/Discard
-remain available.
+remain available. Bike reviews omit steps entirely. Bike live cards and summaries
+also omit steps, distance and pace, with “Distance isn't measured for bike rides”.
 
 The channel uses UserDefaults for per-account checkpoints and pending reviews,
 so `shared_preferences` is unnecessary. The checkpoint is the last safely
@@ -117,6 +118,43 @@ queue handles ignore late saves so deleted data cannot come back:
 Workouts saved while signed out or without consent live in memory and last for
 the app session only.
 
+## Simulator and web regression checks
+
+Enable “Workout simulator” in Workout detection, choose “Simulate walk”, “Simulate
+run” or “Simulate bike”, accept Start, then choose “Stop moving”. The simulator
+uses 20× time with a four-second tick (80 simulated seconds); real sensor mode
+keeps its 15-second tick. Walk prompts appear after about 32 real seconds. Both
+“Finish workout” on the stop prompt and its timeout end at last movement,
+excluding the idle wait. A manual Stop while moving ends at the current time.
+
+The summary uses `WorkoutSession.duration` (`endedAt ?? measuredAt` minus
+`startedAt`), cumulative steps since onset, steps × stride for distance and MET ×
+weight × duration for calories. Simulator steps are delivered before acceptance
+and included in the backdated session; no historical step fetch is needed.
+JavaScript's 32-bit integer shifts made the former `1 << 53` step clamp and
+`1 << 32` duration-formatting clamp zero, independently wiping steps/distance
+and the displayed duration while calories still used the actual duration.
+Both now use `math.max(0, value)`. The repository's bounded rows and `recorded*`
+values were not involved in the immediate summary, which receives the finished
+detector session directly.
+
+Run from `app/`:
+
+```sh
+flutter test
+CHROME_EXECUTABLE=/opt/pw-browsers/chromium flutter test --platform chrome test/workout_widgets_test.dart test/auto_workout_detector_test.dart
+ANALYZER_STATE_LOCATION_OVERRIDE=/root/.cache/workout-analyzer flutter analyze --no-fatal-infos
+```
+
+The Chrome command failed six tests before the fix: countdown formatting,
+simulator controls and detector step totals. After the fix, all 57 tests in that
+command pass. The widget suite now follows the
+complete simulator flow through both finish paths for all three exercise types,
+checks rendered metrics against the time range, cadence, stride and MET, and
+reopens saved summaries. `web_int_safety_test.dart` scans all Dart sources in
+`lib/` to prevent shifts of 32 or more and shifted zero-based clamp bounds.
+The notification timeout's `1 << 31` remains unchanged.
+
 ## Shared motion history golden
 
 [`test/fixtures/workout_motion_history.json`](../../../test/fixtures/workout_motion_history.json)
@@ -135,7 +173,10 @@ cases; open tails retain their onset.
 | --- | --- | --- |
 | `completed_walk` | Walk then still | Walk 0–2100; `to` |
 | `walk_below_minimum` | 599 s walk | None; `to` |
+| `walk_at_minimum` | 600 s walk | Walk 0–600; `to` |
+| `run_below_minimum` | 179 s run | None; `to` |
 | `run_at_minimum` | 180 s run | Run 0–180; `to` |
+| `bike_below_minimum` | 299 s bike | None; `to` |
 | `bike_at_minimum` | 300 s bike | Bike 0–300; `to` |
 | `still_gap_60` | Still 720–780 | Walk 0–2100; `to` |
 | `still_gap_61` | Still 720–781 | Walks 0–720, 781–2100; `to` |
@@ -160,9 +201,9 @@ cases; open tails retain their onset.
 
 ## Real iPhone verification (requires Xcode; not verified in this workspace)
 
-Workspace validation: `flutter test` passed 277 tests (12 screenshot tests skipped);
+Workspace validation: `flutter test` passed 338 tests (12 screenshot tests skipped);
 `flutter analyze --no-fatal-infos` passed with zero errors/warnings (SDK
-deprecation infos remain). The analyzer used
+deprecation infos remain: 30). The analyzer used
 `ANALYZER_STATE_LOCATION_OVERRIDE=/root/.cache/workout-analyzer` because this
 workspace cannot write its default cache under `/root/.dartServer`.
 

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/intl.dart';
 import 'package:wearable_companion/features/workouts/data/motion_history_source.dart';
 import 'package:wearable_companion/features/workouts/data/simulated_sources.dart';
 import 'package:wearable_companion/features/workouts/data/workout_repository.dart';
@@ -8,6 +11,7 @@ import 'package:wearable_companion/features/workouts/domain/activity_sample.dart
 import 'package:wearable_companion/features/workouts/domain/workout_session.dart';
 import 'package:wearable_companion/features/workouts/domain/workout_notification_bridge.dart';
 import 'package:wearable_companion/features/workouts/ui/workout_settings_section.dart';
+import 'package:wearable_companion/features/workouts/ui/workout_sheets.dart';
 import 'package:wearable_companion/features/workouts/ui/workout_today_card.dart';
 import 'package:wearable_companion/features/workouts/workout_provider.dart';
 
@@ -50,6 +54,8 @@ void main() {
   Future<void> show(
     WidgetTester tester, {
     bool settings = false,
+    bool both = false,
+    Duration? tickInterval,
     WorkoutRepository? repository,
     MotionHistorySource? history,
     WorkoutNotificationSink? notifications,
@@ -62,7 +68,7 @@ void main() {
         workoutClockProvider.overrideWithValue(() => now),
         activitySourceProvider.overrideWithValue(activity),
         stepSourceProvider.overrideWithValue(steps),
-        workoutTickIntervalProvider.overrideWithValue(null),
+        workoutTickIntervalProvider.overrideWithValue(tickInterval),
         if (repository != null)
           workoutRepositoryProvider.overrideWithValue(repository),
         if (history != null)
@@ -82,7 +88,11 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: settings
+              child: both
+                  ? const Column(
+                      children: [WorkoutSettingsSection(), WorkoutTodayCard()],
+                    )
+                  : settings
                   ? const WorkoutSettingsSection()
                   : const WorkoutTodayCard(),
             ),
@@ -92,7 +102,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     notifier = container.read(workoutProvider.notifier);
-    if (settings) {
+    if (settings || both) {
       await tester.tap(find.text('Workout detection'));
       await tester.pumpAndSettle();
     }
@@ -101,6 +111,155 @@ void main() {
   void advance(Duration duration) {
     now = now.add(duration);
     notifier.tick();
+  }
+
+  test('workoutDuration formats zero, negative and long durations', () {
+    expect(workoutDuration(Duration.zero), '0:00');
+    expect(workoutDuration(const Duration(seconds: -123)), '0:00');
+    expect(workoutDuration(const Duration(seconds: 100000)), '1666:40');
+  });
+
+  for (final type in ExerciseType.values) {
+    for (final timeout in [false, true]) {
+      testWidgets(
+        'simulated ${type.name}: start, stop moving, ${timeout ? 'timeout' : 'Finish workout'} has consistent summary',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(1200, 2000));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          await show(tester, both: true);
+          await tester.runAsync(() async {
+            await tester.tap(find.text('Workout simulator').first);
+          });
+          await tester.pumpAndSettle();
+          expect(container.read(workoutProvider).simulator, isTrue);
+          final startedAt = container.read(workoutProvider).now;
+          await tester.tap(find.text('Simulate ${type.name}').first);
+          // Each simulator tick is 4 real seconds / 80 simulated seconds.
+          var movingTicks = 0;
+          while (container.read(workoutProvider).startPrompt == null &&
+              movingTicks < 10) {
+            notifier.tick();
+            movingTicks++;
+          }
+          await tester.pumpAndSettle();
+          expect(find.text('Start ${type.label.toLowerCase()}?'), findsWidgets);
+          await tester.tap(
+            find.text('Start ${type.label}').hitTestable().first,
+          );
+          await tester.pumpAndSettle();
+          final active = container.read(workoutProvider).session!;
+          final lastMovement = container.read(workoutProvider).now;
+          expect(active.startedAt, startedAt);
+          expect(active.duration, Duration(seconds: movingTicks * 80));
+          expect(active.endedAt, isNull);
+          // No post-accept movement: all walk/run steps precede acceptance.
+          if (type != ExerciseType.bike) {
+            expect(active.steps, greaterThan(0));
+          } else {
+            expect(find.textContaining('steps'), findsNothing);
+            expect(find.textContaining('km'), findsNothing);
+            expect(
+              find.text("Distance isn't measured for bike rides"),
+              findsWidgets,
+            );
+          }
+          await tester.tap(find.text('Stop moving').first);
+          for (var i = 0; i < 4; i++) {
+            notifier.tick();
+          }
+          await tester.pumpAndSettle();
+          expect(find.text('Stop workout?'), findsWidgets);
+          if (timeout) {
+            notifier.tick();
+            notifier.tick();
+          } else {
+            await tester.tap(find.text('Finish workout').hitTestable().first);
+          }
+          await tester.pumpAndSettle();
+          final summary = container.read(workoutProvider).summary!;
+          expect(summary.startedAt, startedAt);
+          expect(summary.endedAt, lastMovement);
+          expect(summary.measuredAt, lastMovement);
+          expect(summary.duration, active.duration);
+          expect(summary.steps, active.steps);
+          expect(
+            container.read(workoutProvider).todaySessions.single,
+            same(summary),
+          );
+
+          // Parse the rendered time range independently of workoutDuration.
+          final sheet = find.byType(WorkoutSummary).first;
+          String metric(String label) => tester
+              .widget<Text>(
+                find.descendant(
+                  of: sheet,
+                  matching: find.textContaining('$label:'),
+                ),
+              )
+              .data!
+              .substring('$label: '.length);
+          final timeRange = tester
+              .widgetList<Text>(
+                find.descendant(of: sheet, matching: find.byType(Text)),
+              )
+              .map((text) => text.data)
+              .whereType<String>()
+              .singleWhere((text) => text.contains(' – '))
+              .split(' – ');
+          final format = DateFormat('MMM d, HH:mm');
+          final rangeDuration = format
+              .parse(timeRange.last)
+              .difference(format.parse(timeRange.first));
+          final shownDuration = metric('Duration').split(':');
+          final duration = Duration(
+            minutes: int.parse(shownDuration[0]),
+            seconds: int.parse(shownDuration[1]),
+          );
+          expect(duration, summary.duration);
+          // The time range displays whole minutes, while Duration includes seconds.
+          expect((duration - rangeDuration).inSeconds.abs(), lessThan(60));
+          final minutes = duration.inSeconds / 60;
+          final calories = double.parse(metric('Calories').split(' ').first);
+          expect(calories, greaterThan(0));
+          expect(calories, closeTo(type.met * 3.5 * 70 / 200 * minutes, 0.5));
+          if (type == ExerciseType.bike) {
+            expect(find.textContaining('Steps:'), findsNothing);
+            expect(find.textContaining('Distance:'), findsNothing);
+            expect(find.textContaining('Pace:'), findsNothing);
+            expect(find.textContaining('steps'), findsNothing);
+            expect(find.textContaining('km'), findsNothing);
+            expect(
+              find.text("Distance isn't measured for bike rides"),
+              findsWidgets,
+            );
+          } else {
+            final stepCount = int.parse(metric('Steps'));
+            expect(stepCount, greaterThan(0));
+            expect(
+              stepCount,
+              closeTo(
+                minutes * (type == ExerciseType.walk ? 100 : 160),
+                movingTicks,
+              ),
+            );
+            final distance = double.parse(metric('Distance').split(' ').first);
+            expect(distance, closeTo(stepCount * 0.75 / 1000, 0.005));
+          }
+          // Closing either of the two hosts must leave the saved summary intact.
+          await tester.tap(find.text('Done').hitTestable().first);
+          await tester.pumpAndSettle();
+          expect(container.read(workoutProvider).summary, isNull);
+          await tester.tap(find.text(type.label).first);
+          await tester.pumpAndSettle();
+          expect(
+            find.text('Duration: ${shownDuration.join(':')}'),
+            findsOneWidget,
+          );
+          await tester.tap(find.text('Done').first);
+          await tester.pumpAndSettle();
+        },
+      );
+    }
   }
 
   testWidgets('only the settings notification button requests permission', (
@@ -158,6 +317,49 @@ void main() {
     expect(container.read(workoutProvider).historyCandidates, isEmpty);
     expect(container.read(workoutProvider).todaySessions.single.steps, 0);
   });
+
+  for (final (activityType, count, verb) in [
+    (ActivityType.running, 0, 'run'),
+    (ActivityType.cycling, 0, 'cycle'),
+    (ActivityType.cycling, 1000, 'cycle'),
+  ]) {
+    testWidgets('${activityType.name} review with $count steps', (
+      tester,
+    ) async {
+      final start = DateTime(2026, 11, 16, 9, 10);
+      final history = FakeMotionHistory(start)
+        ..activities = [
+          ActivitySample(type: activityType, confidence: 100, timestamp: start),
+          ActivitySample(
+            type: ActivityType.still,
+            confidence: 100,
+            timestamp: start.add(const Duration(minutes: 35)),
+          ),
+        ]
+        ..stepsResult = HistorySteps(count);
+      await show(tester, history: history);
+      final bike = activityType == ActivityType.cycling;
+      expect(
+        find.text(
+          'Did you $verb 09:10–09:45?${bike ? '' : ' Steps unavailable'}',
+        ),
+        findsOneWidget,
+      );
+      if (bike) {
+        expect(find.textContaining('steps'), findsNothing);
+        expect(find.text('Steps unavailable'), findsNothing);
+        expect(
+          find.text("Distance isn't measured for bike rides"),
+          findsOneWidget,
+        );
+      }
+      expect(find.textContaining('km'), findsNothing);
+      expect(find.textContaining('Pace:'), findsNothing);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(container.read(workoutProvider).todaySessions.single.steps, count);
+    });
+  }
 
   testWidgets(
     'lifecycle routes background prompts to notifications and action to notifier',
@@ -424,17 +626,19 @@ void main() {
     expect(container.read(workoutProvider).simulator, isTrue);
     expect(find.text('Simulate walk'), findsOneWidget);
     expect(find.text('Simulate run'), findsOneWidget);
+    expect(find.text('Simulate bike'), findsOneWidget);
     expect(find.text('Stop moving'), findsOneWidget);
     notifier.setAutoStart(true);
     await tester.ensureVisible(find.text('Simulate walk'));
     await tester.tap(find.text('Simulate walk'));
-    notifier.tick();
-    notifier.tick();
+    for (var i = 0; i < 8; i++) {
+      notifier.tick();
+    }
     await tester.pumpAndSettle();
     expect(find.text('Start walk?'), findsOneWidget);
     await tester.tap(find.text('Start Walk'));
     await tester.pumpAndSettle();
-    expect(container.read(workoutProvider).session!.steps, 1000);
+    expect(container.read(workoutProvider).session!.steps, 1064);
     final toggle = tester.widget<SwitchListTile>(
       find.widgetWithText(SwitchListTile, 'Workout simulator'),
     );
@@ -515,6 +719,41 @@ void main() {
     await steps.dispose();
     await tester.pump(const Duration(seconds: 15));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('simulator schedules 4 second ticks and real mode stays at 15', (
+    tester,
+  ) async {
+    await show(tester, tickInterval: const Duration(seconds: 15));
+    final intervals = <Duration>[];
+    // Stream source changes need real async work. Record the actual scheduled
+    // timers in that zone without waiting for wall-clock periods in this test.
+    await tester.runAsync(
+      () => runZoned(
+        () async {
+          await notifier.setSimulator(true);
+          final start = container.read(workoutProvider).now;
+          notifier.tick();
+          expect(
+            container.read(workoutProvider).now,
+            start.add(const Duration(seconds: 80)),
+          );
+          expect(intervals, [const Duration(seconds: 4)]);
+          await notifier.setSimulator(false);
+          activity.emit(ActivityType.walking);
+          expect(intervals, [
+            const Duration(seconds: 4),
+            const Duration(seconds: 15),
+          ]);
+        },
+        zoneSpecification: ZoneSpecification(
+          createPeriodicTimer: (self, parent, zone, interval, callback) {
+            intervals.add(interval);
+            return parent.createPeriodicTimer(zone, interval, callback);
+          },
+        ),
+      ),
+    );
   });
 
   testWidgets('retained inactive tabs do not open duplicate workout prompts', (

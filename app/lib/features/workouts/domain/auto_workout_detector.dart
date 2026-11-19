@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'activity_sample.dart';
 import 'workout_session.dart';
 
@@ -256,7 +258,13 @@ class AutoWorkoutDetector {
 
   void acceptStop() {
     tick();
-    if (isActive) _finish(clock());
+    if (isActive) {
+      _finish(
+        phase == DetectorPhase.promptingStop
+            ? _lastMovementAt ?? clock()
+            : clock(),
+      );
+    }
   }
 
   void dismissStop() {
@@ -330,7 +338,7 @@ class AutoWorkoutDetector {
     startedAt: _startedAt!,
     endedAt: endedAt,
     measuredAt: at,
-    steps: (_countAt(at) - _countAt(_startedAt!)).clamp(0, 1 << 53),
+    steps: math.max(0, _countAt(at) - _countAt(_startedAt!)),
     source: _source,
     weightKg: _sessionWeightKg,
   );
