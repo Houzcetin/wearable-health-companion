@@ -1,0 +1,94 @@
+# Continuous integration: Flutter analyze + tests (VM and Chrome) and Deno tests.
+# No secrets are used. Tests run against fake repositories and fixtures.
+# Actions are pinned to exact release tags. To pin to commit SHAs, replace each
+# tag with the SHA it points to and keep the tag in a trailing comment.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer run of the same branch or pull request cancels the older one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.50.0"
+  DENO_VERSION: "2.x"
+
+jobs:
+  flutter:
+    name: Flutter analyze and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: subosito/flutter-action@v2.18.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - name: Install packages
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+      - name: Test
+        run: flutter test
+
+  flutter-web:
+    name: Flutter tests on Chrome
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: subosito/flutter-action@v2.18.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - uses: browser-actions/setup-chrome@v1.7.3
+        id: chrome
+      - name: Install packages
+        run: flutter pub get
+      - name: Workout tests on Chrome
+        env:
+          CHROME_EXECUTABLE: ${{ steps.chrome.outputs.chrome-path }}
+        run: >-
+          flutter test --platform chrome
+          test/workout_widgets_test.dart
+          test/auto_workout_detector_test.dart
+
+  deno:
+    name: Edge Function tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: denoland/setup-deno@v2.0.2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4.2.0
+        with:
+          path: ~/.cache/deno
+          key: deno-${{ runner.os }}-${{ hashFiles('supabase/functions/**/*.ts', 'supabase/functions/deno.json') }}
+          restore-keys: deno-${{ runner.os }}-
+      - name: Test
+        run: deno test --config supabase/functions/deno.json supabase/functions
+      - name: Type check entry points
+        run: >-
+          deno check --config supabase/functions/deno.json
+          supabase/functions/health-oauth-start/index.ts
+          supabase/functions/health-oauth-callback/index.ts
+          supabase/functions/sync-worker/index.ts
