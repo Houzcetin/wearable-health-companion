@@ -23,6 +23,9 @@ void main() {
       'consent_required'),
     (const FunctionException(status: 429, details: {'error': 'daily_limit'}), 'daily_limit'),
     (const FunctionException(status: 429, details: {'error': 'coach_busy'}), 'busy'),
+    (const FunctionException(status: 503, details: {'error': 'coach_busy'}), 'coach_busy'),
+    (const FunctionException(status: 503, details: {'error': 'private_backend_error'}),
+      'unavailable'),
     (const FunctionException(status: 502, details: {'error': 'coach_unavailable'}),
       'unavailable'),
     (const FunctionException(status: 401), 'unavailable'),
@@ -41,6 +44,9 @@ void main() {
   test('JSON string error bodies map the same way', () {
     expect(mapCoachError(const FunctionException(
       status: 429, details: '{"error":"daily_limit"}')).code, 'daily_limit');
+    expect(mapCoachError(const FunctionException(
+      status: 503, details: '{"error":"coach_busy"}')).message,
+      "The coach has reached today's shared limit. Please try again tomorrow.");
     expect(mapCoachError(const FunctionException(
       status: 502, details: '<html>upstream failure</html>')).code, 'unavailable');
   });

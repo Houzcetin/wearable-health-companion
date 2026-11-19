@@ -34,6 +34,11 @@ function check(error: unknown): void {
   if (error) throw new HttpError(500, "database_error");
 }
 
+function configuredLimit(value: string | undefined, fallback: number, maximum: number): number {
+  const limit = Number(value ?? fallback);
+  return Number.isInteger(limit) && limit > 0 ? Math.min(limit, maximum) : fallback;
+}
+
 export async function handler(req: Request, deps: Dependencies): Promise<Response> {
   const early = preflightOrMethod(req);
   if (early) return early;
@@ -57,12 +62,6 @@ export async function handler(req: Request, deps: Dependencies): Promise<Respons
       .eq("user_id", userId).maybeSingle();
     check(profile.error);
     if (!profile.data?.coach_consent_at) throw new HttpError(403, "coach_consent_required");
-    const usage = await db.rpc("coach_messages_today", { p_user_id: userId });
-    check(usage.error);
-    const override = Number(env("COACH_DAILY_LIMIT") ?? 30);
-    const limit = Number.isInteger(override) && override > 0 ? override : 30;
-    if (typeof usage.data !== "number") throw new HttpError(500, "database_error");
-    if (usage.data >= limit) throw new HttpError(429, "daily_limit");
     const history = await db.from("coach_messages").select("role,content")
       .eq("user_id", userId).eq("thread_id", threadId)
       .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(6);
@@ -81,14 +80,19 @@ export async function handler(req: Request, deps: Dependencies): Promise<Respons
       })),
       { role: "user", content: body.question },
     ];
-    // Count accepted questions even if the model later fails, so repeated failures are bounded.
-    const inserted = await db.from("coach_messages").insert({
-      user_id: userId,
-      thread_id: threadId,
-      role: "user",
-      content: body.question,
+    // Reserve both allowances and persist the question atomically, before any model calls.
+    // Failed model attempts keep their reservation so repeated failures are also bounded.
+    const reservation = await db.rpc("reserve_coach_question", {
+      p_user_id: userId,
+      p_thread_id: threadId,
+      p_question: body.question,
+      p_limit: configuredLimit(env("COACH_DAILY_LIMIT"), 30, 100),
+      p_global_limit: configuredLimit(env("COACH_GLOBAL_DAILY_LIMIT"), 500, 2147483647),
     });
-    check(inserted.error);
+    check(reservation.error);
+    if (reservation.data === "daily_limit") throw new HttpError(429, "daily_limit");
+    if (reservation.data === "coach_busy") throw new HttpError(503, "coach_busy");
+    if (reservation.data !== "reserved") throw new HttpError(500, "database_error");
     const facts: { tools: { name: string; input: unknown; result: unknown }[] } = { tools: [] };
     const read = async (start: string, end: string): Promise<DailyRow[]> => {
       const result = await db.from("daily_metrics").select(DAILY_SELECT)
@@ -119,12 +123,12 @@ export async function handler(req: Request, deps: Dependencies): Promise<Respons
         args.b_end,
       );
     };
-    for (let call = 0; call < 6; call++) {
+    for (let call = 0; call < 3; call++) {
       let response;
       try {
         response = await deps.createMessage({
-          model: env("COACH_MODEL") || "claude-opus-5-5",
-          max_tokens: 16000,
+          model: env("COACH_MODEL") || "claude-sonnet-5-5",
+          max_tokens: 1500,
           betas: ["server-side-fallback-2026-07-01"],
           fallbacks: "default",
           output_config: { effort: "medium" },

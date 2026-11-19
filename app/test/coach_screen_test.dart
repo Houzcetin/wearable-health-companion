@@ -107,6 +107,7 @@ void main() {
 
   const errors = {
     'daily_limit': "You've reached today's coach limit. Try again tomorrow.",
+    'coach_busy': "The coach has reached today's shared limit. Please try again tomorrow.",
     'busy': 'The coach is busy. Try again in a minute.',
     'unavailable': "The coach couldn't answer right now. Try again.",
     'network': 'Check your connection and try again.',

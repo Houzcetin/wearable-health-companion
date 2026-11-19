@@ -112,7 +112,16 @@ Deno.test("eval fake DB serves consent, allowance and isolated message history, 
     timezone: EVAL_TIME_ZONE,
     coach_consent_at: "2026-11-01T00:00:00Z",
   });
-  assertEquals((await db.rpc("coach_messages_today", { p_user_id: "test-user" })).data, 0);
+  assertEquals(
+    (await db.rpc("reserve_coach_question", {
+      p_user_id: "test-user",
+      p_thread_id: "test-thread",
+      p_question: "How was sleep?",
+      p_limit: 30,
+      p_global_limit: 500,
+    })).data,
+    "reserved",
+  );
   assertEquals((await db.from("coach_messages").insert({ content: "discard me" })).status, 201);
   assertEquals((await db.from("coach_messages").select("role,content")).data, []);
   const unknown = await db.from("unexpected_table").select("*");

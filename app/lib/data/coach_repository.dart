@@ -10,6 +10,8 @@ class CoachException extends UserFacingException {
         ? 'Allow the coach to use your daily summaries first.'
         : code == 'daily_limit'
         ? "You've reached today's coach limit. Try again tomorrow."
+        : code == 'coach_busy'
+        ? "The coach has reached today's shared limit. Please try again tomorrow."
         : code == 'busy'
         ? 'The coach is busy. Try again in a minute.'
         : code == 'network'
@@ -38,6 +40,9 @@ CoachException mapCoachError(Object error) {
     }
     if (error.status == 429) {
       return CoachException(code == 'daily_limit' ? 'daily_limit' : 'busy');
+    }
+    if (error.status == 503 && code == 'coach_busy') {
+      return const CoachException('coach_busy');
     }
     return const CoachException('unavailable');
   }
