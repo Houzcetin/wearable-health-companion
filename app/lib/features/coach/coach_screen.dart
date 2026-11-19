@@ -10,6 +10,9 @@ import '../../data/providers.dart';
 import 'widgets/coach_consent_card.dart';
 import 'widgets/message_bubble.dart';
 
+/// Errors caused by the rolling 24-hour limits: retrying immediately cannot help.
+const _limitCodes = {'daily_limit', 'coach_busy'};
+
 const suggestedQuestions = [
   'Why did I sleep badly this week?',
   'How was my resting heart rate this month?',
@@ -201,7 +204,9 @@ class _CoachScreenState extends ConsumerState<CoachScreen> {
                     children: [
                       Text(thread.error!.message,
                         style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                      if (thread.error!.code != 'daily_limit') ...[
+                      // Both limits reset on a rolling 24 hours, so retrying now
+                      // cannot succeed; the message says to try later.
+                      if (!_limitCodes.contains(thread.error!.code)) ...[
                         const SizedBox(height: AppSpace.s),
                         OutlinedButton(
                           onPressed: thread.sending ? null :
