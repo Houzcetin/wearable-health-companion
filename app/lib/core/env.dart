@@ -6,6 +6,7 @@ class Env {
   static const supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
   static const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
   static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+  static const demoMode = bool.fromEnvironment('DEMO_MODE');
 
   static bool get hasBackend => supabaseUrl.isNotEmpty && supabasePublishableKey.isNotEmpty;
 }

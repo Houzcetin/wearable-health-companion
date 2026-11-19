@@ -27,6 +27,15 @@ docs/       Plan, architecture, report, guides, screenshots
 ```
 
 ## Run the app
+### Demo mode (no backend, no device)
+`DEMO_MODE=true` opens the app full of built-in sample data: Today, Trends, Coach, Settings and workout suggestions. Nothing is sent to a server, every screen shows a "Demo data" label, and export and delete are disabled.
+```
+cd app
+flutter run -d chrome --dart-define=DEMO_MODE=true
+flutter build web --dart-define=DEMO_MODE=true --release   # output in app/build/web
+```
+Without the flag the app behaves as before.
+
 Requires Flutter (stable channel).
 ```
 cd app
@@ -48,7 +57,7 @@ Copy `.env.example` to `.env` and fill in the values. Create `.env.json` for the
 - [Technical report](docs/TECHNICAL_REPORT.md) and [cost report](docs/COST_REPORT.md)
 - [Coach evaluation](docs/COACH_EVAL.md)
 - [User guide](docs/USER_GUIDE.md), [iPhone test checklist](docs/IPHONE_TEST_CHECKLIST.md), [user test protocol](docs/USER_TEST_PROTOCOL.md)
-- [Screenshots](docs/screenshots/README.md)
+- [Screenshots](docs/screenshots/README.md), including [demo mode on the web](docs/screenshots/README.md#demo-mode)
 
 ## Rules we follow
 - Team members: Oğuz Çetin and Aleksandr Gordeev. The first app shell, schema and architecture come from Aleksandr's `algordeev/health-app`. Nothing is copied from other teams.
