@@ -121,6 +121,12 @@ one transaction. A shared advisory lock serializes reservations across users. Ac
 remain counted even if the model fails; chat logs are retained. The per-user cap returns
 `429 daily_limit`; the shared cap returns `503 coach_busy` with a readable message in the app.
 
+How the limits behave:
+- Both limits are **rolling 24 hours**, not calendar days: a question counts for 24 hours after it was accepted.
+- A failed model attempt **still uses its reservation**. This is intentional, so repeated failures are also bounded. The question stays in the chat log.
+- Reservations take two locks in a fixed order: the user's lock first, then the shared lock. Concurrent requests from one user and from many users therefore cannot exceed either limit.
+- In the app, neither `daily_limit` nor `coach_busy` offers a Retry button, because retrying now cannot succeed; the message says to try later.
+
 **App settings** are not function secrets. They go in the git-ignored `.env.json` (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`) and are passed with `flutter run --dart-define-from-file=../.env.json`. The Android client needs no ID in the app; it is matched by package name and SHA-1.
 
 **CLI only:** `SUPABASE_DB_PASSWORD` (read by the Supabase CLI) and `GOOGLE_CLOUD_PROJECT_NUMBER` (for manual gcloud/curl calls). Our code reads neither.
