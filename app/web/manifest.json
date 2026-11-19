@@ -1,11 +1,11 @@
 {
-    "name": "wearable_companion",
-    "short_name": "wearable_companion",
+    "name": "Wearable Health Companion",
+    "short_name": "Health Companion",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "See what changed from your usual in 10 seconds.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -101,8 +101,17 @@ class SupabaseHealthRepository implements HealthRepository {
   @override
   Future<SyncResult> requestSync() async {
     await _client.rpc('request_sync', params: {'days_back': 1});
-    final response = await _client.functions.invoke('sync-worker');
-    return SyncResult.fromJson(response.data as Map<String, dynamic>);
+    try {
+      final response = await _client.functions.invoke('sync-worker');
+      return SyncResult.fromJson(response.data as Map<String, dynamic>);
+    } on FunctionException catch (error) {
+      if (error.status == 429) {
+        throw const UserFacingException(
+          'Sync already in progress. Try again in a minute.',
+        );
+      }
+      rethrow;
+    }
   }
 
   @override

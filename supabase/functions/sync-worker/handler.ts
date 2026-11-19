@@ -4,6 +4,7 @@ import {
   bearerToken,
   createServiceClient,
   errorResponse,
+  HttpError,
   jsonResponse,
   preflightOrMethod,
   requireEnv,
@@ -19,12 +20,20 @@ export async function handler(req: Request): Promise<Response> {
     const cronSecret = Deno.env.get("SYNC_CRON_SECRET");
     const isCron = !!cronSecret?.trim() &&
       sameSecret(req.headers.get("x-cron-secret") ?? "", cronSecret);
+    let userId: string | undefined;
     if (!isCron) {
       const token = bearerToken(req);
-      if (!sameSecret(token, requireEnv("SUPABASE_SERVICE_ROLE_KEY"))) await requireUserId(req);
+      if (!sameSecret(token, requireEnv("SUPABASE_SERVICE_ROLE_KEY"))) {
+        userId = await requireUserId(req);
+      }
     }
     const client = createServiceClient();
-    const store = createQueueStore(client);
+    if (userId !== undefined) {
+      const { data, error } = await client.rpc("try_start_user_sync", { p_user_id: userId });
+      if (error || typeof data !== "boolean") throw new HttpError(500, "internal_error");
+      if (!data) throw new HttpError(429, "sync_rate_limited");
+    }
+    const store = createQueueStore(client, userId);
     const config = {
       clientId: requireEnv("GOOGLE_OAUTH_CLIENT_ID"),
       clientSecret: requireEnv("GOOGLE_OAUTH_CLIENT_SECRET"),

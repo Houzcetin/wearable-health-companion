@@ -14,7 +14,10 @@ export class HttpError extends Error {
 
 export function requireEnv(name: string): string {
   const value = Deno.env.get(name);
-  if (!value?.trim()) throw new HttpError(500, `missing_${name}`);
+  if (!value?.trim()) {
+    console.error(`missing_${name}`);
+    throw new HttpError(500, "internal_error");
+  }
   return value;
 }
 

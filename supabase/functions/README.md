@@ -6,10 +6,24 @@ the connection through the Vault RPC, queues a backfill with `p_days = 35`, and 
 app. The RPC includes today and the previous 35 local dates (36 dates); that inclusivity comes from
 the existing SQL.
 
-`sync-worker` accepts a user JWT verified by `auth.getUser`, or the exact service role key. Its
-gateway JWT check is disabled so either credential can reach the explicit handler validation. It
-drains the shared queue through the existing service-role claim RPC; a user-triggered run can
-process other users' queued jobs but returns only counts. It claims at most 25 jobs at once,
+`sync-worker` accepts a user JWT verified by `auth.getUser`, the configured `x-cron-secret`, or
+the exact service role bearer key. Its gateway JWT check is disabled so these credentials reach
+the explicit handler validation. Only cron/service calls claim the global queue through
+`claim_sync_jobs(batch_size)`. User calls always use `claim_sync_jobs(batch_size, p_user_id)` with
+the verified caller's ID for every batch; request bodies cannot override that ID. Both claim
+signatures are executable only by the service role. Remaining counts have the same user/global
+scope as claims.
+
+The app's "Sync now" first calls `request_sync(days_back: 1)`, then invokes `sync-worker` directly
+with its user JWT and parses the worker's processed/failed/remaining counts. Before any user claim,
+the service calls `try_start_user_sync(p_user_id)`: an atomic database upsert in
+`user_sync_rate_limits` permits at most one invocation per user per 60 seconds, including across
+concurrent requests and worker instances. This table and RPC are service-role only. A rejected
+call returns HTTP 429 with `{"error":"sync_rate_limited"}` without claiming jobs; the app displays
+"Sync already in progress. Try again in a minute." Cron/service calls bypass this rate limit.
+
+Users without health consent are skipped before any connection or Vault token is read.
+The worker claims at most 25 jobs at once,
 processes at most 200, and stops fetching at about 38 seconds. Unstarted claims are returned without
 consuming a retry attempt. Database settlement can add a bounded request timeout after the fetching
 budget. Each request has an eight-second timeout. Mapped fields for a user/date are merged into a
@@ -22,7 +36,7 @@ application/provider status codes are stored in `last_error`. Revoked grants mar
 revoked and fail that user's pending/running backlog. If a retry collides with a newer pending
 duplicate, that duplicate retains the work and the running row is marked done as superseded.
 `last_synced_at` advances only for users without a failure in the invocation and without
-pending/running jobs. Remaining means all pending/running jobs, including delayed retries. Processed
+pending/running jobs. Remaining means pending/running jobs within the caller's scope, including delayed retries. Processed
 means jobs handled in this invocation; failed counts handled jobs that did not complete
 successfully, including scheduled retries. Backlog rows failed in bulk after revocation are not
 counted unless they were handled in this run.
@@ -35,12 +49,13 @@ redirect reason codes.
 Run from the repository root:
 
 ```sh
-npx -y deno test --config supabase/functions/deno.json supabase/functions/_shared
+npx -y deno test --config supabase/functions/deno.json supabase/functions
 npx -y deno check --config supabase/functions/deno.json supabase/functions/health-oauth-start/index.ts supabase/functions/health-oauth-callback/index.ts supabase/functions/sync-worker/index.ts
 ```
 
 The fixtures README documents every unverified real-account assumption. No remote project, Google
-account, database, deployment or device is used by these tests.
+account, database, deployment or device is used by these Deno tests. PostgreSQL 16 regression and
+concurrency checks are documented in [../tests/README.md](../tests/README.md).
 
 If the standard runner aborts with Windows named-pipe error 5, the same cases can be executed
 without its IPC transport. This fallback does not replace the standard runner's resource/operation
