@@ -6,7 +6,7 @@ import '../domain/activity_sample.dart';
 import '../workout_provider.dart';
 import 'workout_sheets.dart';
 
-export '../workout_provider.dart' show clearLocalWorkoutData;
+export '../workout_provider.dart' show deleteHealthDataAndLocalWorkouts;
 
 class WorkoutSettingsSection extends ConsumerStatefulWidget {
   const WorkoutSettingsSection({super.key});
