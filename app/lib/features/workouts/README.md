@@ -111,9 +111,11 @@ queue handles ignore late saves so deleted data cannot come back:
   null) and when health consent changes from granted to withdrawn while the app
   runs. Starting the app with consent already off does not clear the queue, so
   rows paused by RLS stay available for a later grant.
-- On sign-out and consent withdrawal a failed local clear is only reported; it
-  does not block them. In the delete flows the clear is awaited, so a failure
-  there shows the delete error message even though the server data is gone.
+- A failed local clear is only reported (`FlutterError.reportError`), never shown
+  to the user. After a successful server deletion
+  (`deleteHealthDataAndLocalWorkouts`) a failed clear does not turn the result
+  into a "Could not delete…" error: sign-out and cache invalidation still run.
+  Any rows left behind are cleared at the next sign-out or consent withdrawal.
 
 Workouts saved while signed out or without consent live in memory and last for
 the app session only.
