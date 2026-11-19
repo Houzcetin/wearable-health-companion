@@ -60,7 +60,7 @@ Three triggers feed one queue: the user's **Sync now**, a **15-minute pg_cron jo
 - **Backfill.** Connecting queues today plus the previous 35 local dates. Rollup limits (14 days for calories, 90 for steps) force several requests.
 - **Civil dates.** Google rolls up by civil date, so everything is keyed by the user's local date and timezone.
 
-Open points: 11 assumptions about Google's wire shapes are marked `UNVERIFIED` in code until checked against a real account (SETUP.md, "Open items").
+Open points: 12 `UNVERIFIED` markers remain in code (11 wire-shape assumptions plus the webhook keyset layout) until checked against a real account (SETUP.md, "Open items").
 
 ## 6. Coach design and evaluation
 
@@ -98,7 +98,7 @@ Full details and the iPhone verification list: [`app/lib/features/workouts/READM
 
 ## 8. Security and privacy
 
-**QA security review (summary).** The database layer was tested on a real PostgreSQL with separate users: RLS is enabled on all 18 tables, and users cannot read, change or delete other users' data; every SECURITY DEFINER function has a fixed search_path and EXECUTE granted only to the roles that need it; health data and OAuth tokens are not reachable from the client (Vault, service role only). Edge Functions authenticate themselves (user JWT, cron secret or signed webhook) and do not leak details in error responses; no secrets were found in the git history.
+**QA security review (summary).** The database layer was tested on a real PostgreSQL with separate users: RLS is enabled on all 18 tables, and users cannot read, change or delete other users' data; every SECURITY DEFINER function has a fixed search_path and EXECUTE granted only to the roles that need it; health data and OAuth tokens are not reachable from the client (Vault, service role only). Edge Functions authenticate themselves (user JWT, cron secret or signed webhook) and do not leak details in error responses; no secrets were found in the git history. Error responses carry only short codes (one exception: missing-configuration codes name the variable).
 
 **Privacy design.** Only daily aggregates and finished workouts are stored. The in-app disclosure explains what is read and stored before consent; consent is logged in `consent_events` and the coach has its own consent. Users can export their data and delete health data or the whole account. Secrets live in function secrets, Vault and git-ignored files; `.env.example` lists names only. The coach sees only the caller's rows through tools that filter by the authenticated user, and its prompt forbids medical claims. This is not a medical product.
 
@@ -108,11 +108,16 @@ The QA review found the following. **Fixes are in progress; each item will be up
 
 | Risk | Detail | Status |
 |---|---|---|
-| Sync worker access | A user-triggered `sync-worker` call drains the shared queue, so it can process other users' queued jobs (it returns only counts). The worker should be limited to the caller's own jobs or to service credentials. | In progress |
+| Sync worker access | A user-triggered `sync-worker` call drains the shared queue, so it can process other users' queued jobs (it returns only counts). Planned: user calls limited to the caller's own jobs plus a per-user rate limit; the global queue only for cron and service credentials. | In progress |
 | Timezone validation | `profiles.timezone` drives civil-date logic and the scheduled queueing. Invalid or unexpected values should be rejected at write time and fall back safely. | In progress |
-| Coach cost limits | The limit is per user per rolling 24 hours. There is no global daily ceiling and no per-request token budget, so total spend scales with the number of users. | In progress |
-| Mobile secure storage | The pending workout queue is kept in SharedPreferences, which is not encrypted storage. Session tokens and any health-adjacent local data should use the platform's secure storage. | In progress |
-| Export scope | Export covers profile, consent events, connection status, daily metrics, coach messages and workouts. `weekly_insights` and `summary_feedback` are not included, and the scope should be documented or completed. | In progress |
+| Coach cost limits | The limit is per user per rolling 24 hours and the check is not atomic, so parallel requests can exceed it. There is no global daily ceiling, and the default model and `max_tokens` of 16000 make it the most expensive configuration, so total spend scales with the number of users. | In progress |
+| Mobile secure storage and backups | The pending workout queue is kept in SharedPreferences and session tokens are stored as plain text. Android `allowBackup` and iOS device backups can copy them. Planned: platform secure storage and backup exclusion. | In progress |
+| Health consent not enforced on the server | Health consent is enforced by the app and by the `workouts` insert policy, but the server functions do not all re-check it. | In progress |
+| `join_challenge` and sharing consent | `join_challenge` does not check the user's sharing consent. The game layer is not used by the app yet, but the function is callable. | In progress |
+| Default `display_name` | The signup trigger defaults `display_name` to the e-mail prefix, which can expose an address fragment on a future friends board. | In progress |
+| Table privileges | The `anon` and `authenticated` roles hold `TRUNCATE` on public tables. RLS does not apply to `TRUNCATE`, so the grant should be revoked. | In progress |
+| Export scope | Export covers profile, consent events, connection status, daily metrics, coach messages and workouts. `weekly_insights`, `summary_feedback` and derived game data are not included; the export is being extended. | In progress |
+| "Delete health data" and derived game data | Deleting health data does not delete derived game-layer rows (for example points or streaks). Left unchanged on purpose by the team's decision; the export is extended so the user can see that data. | Accepted |
 
 ## 9. Test strategy
 
@@ -120,7 +125,7 @@ The QA review found the following. **Fixes are in progress; each item will be up
 |---|---|---|
 | Flutter widget and unit tests (VM) | Today, Trends, Coach, Settings, auth flow, usual-range math, workout detector, repository, pending queue, notifications bridge, history review | 355 tests passing in one local run, plus 12 screenshot tests that run on demand |
 | Workout tests on Chrome | The workout widget and detector suites also run with `flutter test --platform chrome`; this found a web integer-shift bug (32-bit shifts) now guarded by a source-scan test | 57 tests in that command |
-| Deno tests (Edge Functions) | Webhook signature, queue, mapping, worker, coach tools and handler, export, delete, routes | ≈ 88 test blocks counted from source (the standard runner was not available in the documentation workspace) |
+| Deno tests (Edge Functions) | Webhook signature, queue, mapping, worker, coach tools and handler, export, delete, routes | 104 tests passing (88 test blocks, some parameterised) |
 | Golden fixture | `workout_motion_history.json` read by the Dart golden test and by RunnerTests' `testMotionHistoryGolden`, so Dart and Swift produce the same bouts | 27 cases |
 | iOS RunnerTests | Replay helper, active-marker expiry, revision handling | 4 test functions, run on a Mac with ⌘U |
 | Coach evaluation | 26 questions × 3 repeats, rule-based checks with their own unit tests | 78 answers per run |

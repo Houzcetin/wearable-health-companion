@@ -2,6 +2,8 @@
 
 This file lists every cost item, the formula behind it and where to read the real figure. **No prices are filled in here.** Prices change and plans differ, so copy numbers from the invoices and dashboards named below and mark each as measured, estimated or still to fill. Put the date next to every figure.
 
+Dashboard menu names below were written from memory of the current UI and **must be checked**: Supabase, Anthropic and Google Cloud change their consoles, so a path may have moved.
+
 Columns: **Measured** = read from an invoice, dashboard or log. **Estimated** = computed from a formula with stated inputs. **To fill** = not yet known.
 
 ## Summary
@@ -30,7 +32,7 @@ Project `ftgozpdlwcoiwynqcslh` in `eu-central-1` (Frankfurt). The organization i
 | Database size | Rows × row size. `daily_metrics` grows one row per user per day; `sync_queue` is transient; `coach_messages` grows with questions; `workouts` with workouts | Dashboard → Reports → Database, or Organization → Usage | | | |
 | Database egress and API requests | App reads of `daily_metrics`, `coach_messages`, `workouts` | Dashboard → Reports → API, Organization → Usage | | | |
 | Auth monthly active users | Distinct signed-in users per month | Dashboard → Authentication → Usage, Organization → Usage | | | |
-| pg_cron / pg_net | Included in the database; the job runs every 15 minutes | Dashboard → Database → Cron (run history) | | | |
+| pg_cron / pg_net | Included in the database; the job runs every 15 minutes | Dashboard → Database → Cron (run history); newer dashboards may list it under Integrations → Cron | | | |
 | Overage charges | Usage above plan quotas | Organization → Billing → Upcoming invoice | | | |
 
 **Spend cap.** On plans that have it, the Spend Cap is a toggle under **Organization → Billing**. With it on, usage above the included quotas is blocked instead of billed; with it off, overage is charged. Record which setting is active: ____ . Also set a billing alert or budget if the dashboard offers one.
@@ -55,7 +57,7 @@ The input includes the stable system prompt, the last six messages and the tool 
 |---|---|
 | Tokens and cost per model and day | Anthropic Console → Usage and Cost (filter by API key or workspace) |
 | Tokens per eval run | Console usage during an eval run; `docs/eval/*.json` hold the raw answers of the evaluation runs |
-| Average questions per user per day | `select count(*) from coach_messages where role = 'user' and created_at > now() - interval '1 day'` in the SQL editor |
+| Average questions per active user per day | `select count(*)::float / nullif(count(distinct user_id), 0) from coach_messages where role = 'user' and created_at > now() - interval '1 day'` in the SQL editor (questions in the last 24 hours divided by users who asked) |
 
 **Limits that bound the cost:**
 

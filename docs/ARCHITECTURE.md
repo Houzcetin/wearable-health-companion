@@ -78,7 +78,7 @@ sequenceDiagram
   participant H as health-webhook
   participant G as Google Health API
   participant C as pg_cron (15 min)
-  App->>DB: "Sync now": request_sync() queues today
+  App->>DB: "Sync now": request_sync(days_back 1) queues today and yesterday
   App->>W: invoke (user JWT)
   C->>DB: run_scheduled_sync(): queue 9 types × last 3 dates per active connection
   C->>W: pg_net POST with x-cron-secret
@@ -86,7 +86,7 @@ sequenceDiagram
   H->>DB: enqueue_webhook_job() (idempotent), reply 204
   W->>DB: claim_sync_jobs() (≤25 at once, ≤200 per call, ~38 s budget)
   W->>G: refresh token from Vault, then dailyRollUp / list per type
-  W->>DB: merge sparse upsert into daily_metrics; mark job done; last_synced_at
+  W->>DB: merge sparse upsert into daily_metrics, mark job done, set last_synced_at
 ```
 
 - `health-webhook` checks the Authorization secret and the signature, inserts into `sync_queue` (a unique index on user, data type and date while pending collapses duplicates) and returns 204. It does no heavy work and never invokes the worker.
@@ -116,7 +116,7 @@ sequenceDiagram
   M-->>C: final answer
   C->>DB: store question, answer and exact tool results (facts_json)
   C-->>App: {threadId, answer, facts, isDemo}
-  App->>App: render answer; "Numbers used" shows facts
+  App->>App: render answer, "Numbers used" shows facts
 ```
 
 - `coach` verifies the session, checks `coach_consent_at` and enforces a rolling 24-hour limit with `coach_messages_today` (default 30, `COACH_DAILY_LIMIT` overrides). Accepted questions count even when the model call fails.
@@ -140,7 +140,7 @@ stateDiagram-v2
   promptingStop --> active: Keep going or movement resumes
   promptingStop --> finished: Finish workout or 2 min timeout (ends at last movement)
   active --> finished: Stop (ends now)
-  finished --> idle: summary saved
+  finished --> candidate: new activity after the 30 min cooldown
 ```
 
 ```mermaid
