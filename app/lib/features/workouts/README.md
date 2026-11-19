@@ -110,7 +110,9 @@ queue handles ignore late saves so deleted data cannot come back:
   null) and when health consent changes from granted to withdrawn while the app
   runs. Starting the app with consent already off does not clear the queue, so
   rows paused by RLS stay available for a later grant.
-- A failed local clear is reported but does not block sign-out or deletion.
+- On sign-out and consent withdrawal a failed local clear is only reported; it
+  does not block them. In the delete flows the clear is awaited, so a failure
+  there shows the delete error message even though the server data is gone.
 
 Workouts saved while signed out or without consent live in memory and last for
 the app session only.
