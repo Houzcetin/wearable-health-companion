@@ -43,6 +43,16 @@ flutter run --dart-define-from-file=../.env.json
 ```
 Without `.env.json` the app still runs as an offline shell.
 
+## Web demo
+A demo build on sample data (no sign-in) is deployed to GitHub Pages on every push to `main`:
+https://houzcetin.github.io/wearable-health-companion/
+
+Run the same build locally:
+```
+cd app
+flutter run -d chrome --dart-define=DEMO_MODE=true
+```
+
 ## Continuous integration
 `.github/workflows/ci.yml` runs on every pull request and push to `main`: `flutter analyze` and `flutter test` (Flutter 3.50.0), the workout tests on Chrome, and the Deno tests and type checks for the Edge Functions. It uses no secrets. To run the same checks locally, see `app/lib/features/workouts/README.md` and `supabase/functions/README.md`.
 
