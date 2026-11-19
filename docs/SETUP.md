@@ -1,6 +1,6 @@
 # Setup
 
-Secrets (keys, passwords) live only in `.env`, which is git-ignored. This file holds IDs and steps only.
+Secrets (keys, passwords) live only in `.env`, which is git-ignored. Flutter public settings live in the git-ignored `.env.json`, and local iOS Google IDs live in the git-ignored `app/ios/Flutter/Google.xcconfig`. This file holds IDs and steps only.
 
 ## Projects (created 2026-11-11)
 
@@ -44,6 +44,33 @@ One web client serves both redirect flows. Its secret is in `.env` only and cann
 
 The Android client is tied to one machine's debug keystore. A teammate building on their own machine needs their SHA-1 added: either a second Android client, or a shared debug keystore.
 
+## iOS Google sign-in configuration (done 2026-11-19)
+
+1. In the Google Cloud project's **Google Auth Platform → Clients** (or **APIs & Services → Credentials**), open the **iOS** OAuth client for bundle ID `com.wearablecompanion.wearableCompanion`. Copy its client ID and **iOS URL scheme** (the reversed client ID). For example, `123-example.apps.googleusercontent.com` becomes `com.googleusercontent.apps.123-example`. If using a downloaded `GoogleService-Info.plist`, these are its `CLIENT_ID` and `REVERSED_CLIENT_ID` values; that file does not need to be added to the app.
+2. From the repository root, create the local build settings file:
+
+   ```sh
+   cp app/ios/Flutter/Google.xcconfig.example app/ios/Flutter/Google.xcconfig
+   ```
+
+   Replace both placeholders in `Google.xcconfig`:
+
+   ```xcconfig
+   GOOGLE_IOS_CLIENT_ID = YOUR_IOS_CLIENT_ID.apps.googleusercontent.com
+   GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.YOUR_IOS_CLIENT_ID
+   ```
+
+   Keep real values in `Google.xcconfig`; only the placeholder `.example` file belongs in version control. Debug, Release and Profile each optionally include it with `#include? "Google.xcconfig"`, so a missing local file does not cause an xcconfig include error. Google sign-in still requires valid values.
+3. Set `GOOGLE_IOS_CLIENT_ID` in the root `.env.json` to the **same iOS client ID**, alongside `GOOGLE_WEB_CLIENT_ID` (the web OAuth client ID) and the existing public Supabase settings. Xcode build settings do not automatically become Dart defines. On a Mac, launch from `app/` with:
+
+   ```sh
+   flutter run --dart-define-from-file=../.env.json
+   ```
+
+Verified against the cached `google_sign_in` **7.2.0** README/initialization source and the locked `google_sign_in_ios` **6.3.8** README/Swift implementation: `CFBundleURLTypes` → `CFBundleURLSchemes` must contain the reversed client ID even when Dart supplies `clientId`. `Runner/Info.plist` reads it from `$(GOOGLE_REVERSED_CLIENT_ID)` and supplies the optional native `GIDClientID` default from `$(GOOGLE_IOS_CLIENT_ID)`. Dart initialization takes precedence over that default; this app still requires the iOS Dart define. The web/server client ID is already passed from Dart, so `GIDServerClientID` is unnecessary.
+
+The configuration item is closed. An Xcode build and Google sign-in on an iPhone, including the nonce check below, still need verification on a Mac/device.
+
 ## Supabase Google sign-in (done 2026-11-12)
 Configured in `supabase/config.toml` under `[auth.external.google]` and pushed with:
 ```
@@ -58,7 +85,7 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 - **Emulator needs a Google Play image:** sign-in fails on images without the Play Store. Use an AVD built from `system-images;android-35;google_apis_playstore;x86_64` with a test-user Google account added.
 - **Account not linked to Google Health (verified 2026-11-12):** for a Google account that has never set up the Fitbit or Google Health app, `users/me/identity` returns `400 FAILED_PRECONDITION` "The account is not linked to Google Health." The callback reports this as `not_linked` and the app asks the user to set up the app first. A real connection needs a tester whose account has a Google Health profile.
 - **Callback logs:** `health-oauth-callback` logs the failure reason and, for Health API errors, Google's status and message (never tokens). Read them with `supabase logs --remote=ftgozpdlwcoiwynqcslh --search "health-oauth" --since 1h`.
-- **iOS:** `ios/Runner/Info.plist` still needs the reversed iOS client ID as a URL scheme for Google sign-in. iOS has not been built (needs a Mac).
+- **iOS configuration (done 2026-11-19):** the reversed-client URL scheme and native client ID now use local xcconfig build settings (see above). Xcode build and iPhone sign-in verification remain pending (needs a Mac).
 - **Google Health wire shapes:** 11 assumptions marked `UNVERIFIED` in `supabase/functions/_shared/google.ts` and `mapping.ts`. Fixtures are synthetic. Check them against a real account first.
 - **First sync takes several runs:** the 35-day backfill is 324 jobs; one `sync-worker` call handles at most 200 jobs or about 40 seconds.
 - **Scheduled sync:** solved in Stage 5. pg_cron calls `sync-worker` with an `x-cron-secret` header instead of a key in `Authorization` (see below).
@@ -67,11 +94,18 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 `seed_demo_metrics(p_user_id, p_days)` is a service-role-only RPC that inserts rows flagged `is_demo`. It refuses if the user has real rows. The app shows a "Demo data" chip for such rows. Demo rows appear on Today even before Google Health is connected (only after health-data consent), with a "Sample data, not from your device" note.
 
 ## Stage 5 backend (done 2026-11-13)
-**Function secrets** (`supabase secrets set`, values only in `.env`):
+**Function secrets** (`supabase secrets set`, values only in `.env`; [`.env.example`](../.env.example) lists every name):
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`: injected by hosted Supabase, so you do not set them. They are needed in `.env` only for local runs.
+- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`: the web OAuth client, used by `health-oauth-start`, `health-oauth-callback` and `sync-worker`.
+- `OAUTH_STATE_SECRET`: signs the OAuth `state` (random, 32+ bytes).
 - `ANTHROPIC_API_KEY`: the coach's Claude key. Set a spending limit in the Anthropic console.
 - `HEALTH_WEBHOOK_SECRET`: Google sends `Bearer <secret>` in `Authorization` on every webhook call.
 - `SYNC_CRON_SECRET`: pg_cron sends it to `sync-worker` in `x-cron-secret`.
 - Optional: `COACH_MODEL` (default `claude-opus-5-5`), `COACH_DAILY_LIMIT` (default 30 questions per 24 h).
+
+**App settings** are not function secrets. They go in the git-ignored `.env.json` (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`) and are passed with `flutter run --dart-define-from-file=../.env.json`. The Android client needs no ID in the app; it is matched by package name and SHA-1.
+
+**CLI only:** `SUPABASE_DB_PASSWORD` (read by the Supabase CLI) and `GOOGLE_CLOUD_PROJECT_NUMBER` (for manual gcloud/curl calls). Our code reads neither.
 
 **Vault entries** (read by `run_scheduled_sync()`): `project_url` (`https://ftgozpdlwcoiwynqcslh.supabase.co`) and `sync_cron_secret` (same value as `SYNC_CRON_SECRET`). If either is missing, the cron job only enqueues and logs `scheduled_sync_missing_configuration`.
 
