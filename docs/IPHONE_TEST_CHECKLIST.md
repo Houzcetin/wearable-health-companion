@@ -10,7 +10,6 @@ Tester: ____________ Date: ____________ iPhone / iOS: ____________ Build (commit
 
 - A Mac with a current Xcode, an iPhone cabled to it, and a Google account that is a test user of the Google Cloud project and has set up the Google Health or Fitbit app (see [SETUP.md](SETUP.md)).
 - Bundle ID `com.wearablecompanion.wearableCompanion`; background task identifier `com.wearablecompanion.workouts.refresh`.
-- Known gap: `ios/Runner/Info.plist` may still need the reversed iOS client ID as a URL scheme for Google sign-in (SETUP.md, "Open items"). If sign-in cannot return to the app, fix that first.
 - Know the pass/fail rule: a step passes only if the app does what **Expected** says without a crash, a stuck spinner or a duplicate entry.
 
 ## 1. Build and install
@@ -21,7 +20,9 @@ Tester: ____________ Date: ____________ iPhone / iOS: ____________ Build (commit
 | 1.2 | Runner target → **Signing & Capabilities**: choose your Team and let Xcode manage signing. | No red signing errors; a provisioning profile is created. | ☐ |
 | 1.3 | Same tab → **Background Modes**: **Background fetch** is ticked. | `fetch` is listed (it is also `UIBackgroundModes` in Info.plist). | ☐ |
 | 1.4 | Info.plist: `BGTaskSchedulerPermittedIdentifiers` contains `com.wearablecompanion.workouts.refresh`; `NSMotionUsageDescription` is present. | The identifier matches the one in `WorkoutMotionHistory.swift`; the motion text reads "Recognize walks, runs and bike rides and count steps for your workouts." | ☐ |
+| 1.4a | `ios/Flutter/Google.xcconfig` exists (copied from `Google.xcconfig.example`; it is git-ignored) and both `GOOGLE_IOS_CLIENT_ID` and `GOOGLE_REVERSED_CLIENT_ID` are filled from the **same** iOS OAuth client. `.env.json` has the same `GOOGLE_IOS_CLIENT_ID`. See [SETUP.md](SETUP.md). | No `YOUR_IOS_CLIENT_ID` placeholder is left. The reversed ID is `com.googleusercontent.apps.<the client ID without .apps.googleusercontent.com>`. | ☐ |
 | 1.5 | Select your iPhone and press **Run** (⌘R). | The app builds, installs and launches. `WorkoutMotionHistory.swift` is compiled and the method channel registers (no "missing plugin" log). | ☐ |
+| 1.5a | After the build, inspect the built Info.plist: `plutil -p <path to Runner.app>/Info.plist` (for example `app/build/ios/iphoneos/Runner.app/Info.plist` after `flutter build ios`, or the Runner.app under Xcode's DerivedData). | `GIDClientID` shows your iOS client ID and `CFBundleURLSchemes` contains the reversed client ID, both with real values, not `$(GOOGLE_IOS_CLIENT_ID)` or `$(GOOGLE_REVERSED_CLIENT_ID)`. | ☐ |
 | 1.6 | Trust the developer profile on the phone if asked (Settings → General → VPN & Device Management). | The app opens. | ☐ |
 | 1.7 | Press **⌘U** with the `RunnerTests` scheme. | All RunnerTests pass, including `testMotionHistoryGolden`, the active-marker expiry tests and the revision tests. The JSON resource loads from the test bundle. | ☐ |
 
