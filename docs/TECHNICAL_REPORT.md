@@ -60,7 +60,7 @@ Three triggers feed one queue: the user's **Sync now**, a **15-minute pg_cron jo
 - **Backfill.** Connecting queues today plus the previous 35 local dates. Rollup limits (14 days for calories, 90 for steps) force several requests.
 - **Civil dates.** Google rolls up by civil date, so everything is keyed by the user's local date and timezone.
 
-Open points: 12 `UNVERIFIED` markers remain in code (11 wire-shape assumptions plus the webhook keyset layout) until checked against a real account (SETUP.md, "Open items").
+Open points: 13 `UNVERIFIED` markers remain in code (grep count on `main`) until checked against a real account (SETUP.md, "Open items").
 
 ## 6. Coach design and evaluation
 
