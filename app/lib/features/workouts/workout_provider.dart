@@ -75,6 +75,31 @@ final workoutStoreProvider = Provider<WorkoutStore?>((ref) {
 Future<void> clearLocalWorkoutData(String userId) =>
     PendingWorkoutQueue(userId).clear();
 
+/// Capture the owner before deletion can switch accounts or unmount Settings.
+Future<void> deleteHealthDataAndLocalWorkouts(
+  WidgetRef ref, {
+  required bool account,
+}) async {
+  final repository = ref.read(healthRepositoryProvider);
+  final userId = ref.read(currentUserProvider)?.id;
+  await repository.deleteData(account: account);
+  if (userId == null) return;
+  try {
+    await clearLocalWorkoutData(userId);
+  } catch (error, stackTrace) {
+    // Server deletion succeeded; still allow sign-out and cache invalidation.
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stackTrace,
+        context: ErrorDescription(
+          'while clearing local workouts after deletion',
+        ),
+      ),
+    );
+  }
+}
+
 // Kept separate from the repository so these listeners survive auth/consent
 // rebuilds, including the transition to an in-memory repository.
 final workoutQueuePrivacyProvider = Provider<void>((ref) {
