@@ -78,7 +78,9 @@ The Android client is tied to one machine's debug keystore. A teammate building 
 
 Verified against the cached `google_sign_in` **7.2.0** README/initialization source and the locked `google_sign_in_ios` **6.3.8** README/Swift implementation: `CFBundleURLTypes` → `CFBundleURLSchemes` must contain the reversed client ID even when Dart supplies `clientId`. `Runner/Info.plist` reads it from `$(GOOGLE_REVERSED_CLIENT_ID)` and supplies the optional native `GIDClientID` default from `$(GOOGLE_IOS_CLIENT_ID)`. Dart initialization takes precedence over that default; this app still requires the iOS Dart define. The web/server client ID is already passed from Dart, so `GIDServerClientID` is unnecessary.
 
-The configuration item is closed. An Xcode build and Google sign-in on an iPhone, including the nonce check below, still need verification on a Mac/device.
+Verified on 2026-11-19: Xcode build and Google sign-in on an iPhone 17 Pro (iOS 26.5).
+
+**Running on an iPhone.** CocoaPods must be installed (the `flutter_activity_recognition` plugin has no Swift Package Manager support). For a free Apple ID, add your own `DEVELOPMENT_TEAM = <team id>` to the git-ignored `Google.xcconfig`; never commit a team ID. Install with `flutter run --release -d <device>`, since debug builds only start while attached to Flutter. Apps signed with a free Personal Team expire after 7 days and need reinstalling.
 
 ## Supabase Google sign-in (done 2026-11-12)
 Configured in `supabase/config.toml` under `[auth.external.google]` and pushed with:
@@ -90,11 +92,11 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 - Other settings in `config.toml` were aligned with the hosted project's defaults so a push changes only what we intend. Always read the push preview before confirming.
 
 ## Open items from the first flow (2026-11-12)
-- **Nonce check, verified on Android (2026-11-12):** native sign-in with `google_sign_in` 7 works with `skip_nonce_check = false`. Not yet checked on iOS.
+- **Nonce check (changed 2026-11-19):** `skip_nonce_check = true`. Android worked with the check on, but iOS sign-in failed with it ("could not be verified"): the Google iOS SDK sets its own nonce, which cannot be passed to Supabase. Supabase still verifies the token signature, audience (our client IDs) and expiry.
 - **Emulator needs a Google Play image:** sign-in fails on images without the Play Store. Use an AVD built from `system-images;android-35;google_apis_playstore;x86_64` with a test-user Google account added.
 - **Account not linked to Google Health (verified 2026-11-12):** for a Google account that has never set up the Fitbit or Google Health app, `users/me/identity` returns `400 FAILED_PRECONDITION` "The account is not linked to Google Health." The callback reports this as `not_linked` and the app asks the user to set up the app first. A real connection needs a tester whose account has a Google Health profile.
 - **Callback logs:** `health-oauth-callback` logs the failure reason and, for Health API errors, Google's status and message (never tokens). Read them with `supabase logs --remote=ftgozpdlwcoiwynqcslh --search "health-oauth" --since 1h`.
-- **iOS configuration (done 2026-11-19):** the reversed-client URL scheme and native client ID now use local xcconfig build settings (see above). Xcode build and iPhone sign-in verification remain pending (needs a Mac).
+- **iOS configuration (done 2026-11-19):** the reversed-client URL scheme and native client ID now use local xcconfig build settings (see above). Xcode build and iPhone sign-in verified on 2026-11-19.
 - **Google Health wire shapes:** 11 assumptions marked `UNVERIFIED` in `supabase/functions/_shared/google.ts` and `mapping.ts`. Fixtures are synthetic. Check them against a real account first.
 - **First sync takes several runs:** the 35-day backfill is 324 jobs; one `sync-worker` call handles at most 200 jobs or about 40 seconds.
 - **Scheduled sync:** solved in Stage 5. pg_cron calls `sync-worker` with an `x-cron-secret` header instead of a key in `Authorization` (see below).

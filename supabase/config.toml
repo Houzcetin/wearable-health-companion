@@ -351,7 +351,9 @@ client_id = "83744150851-vu2gnmvalcrsm27rqlkp0uprenou7pe0.apps.googleusercontent
 secret = "env(GOOGLE_OAUTH_CLIENT_SECRET)"
 redirect_uri = ""
 url = ""
-skip_nonce_check = false
+# The Google iOS SDK sets its own nonce, which the app cannot pass to Supabase,
+# so iOS native sign-in fails with the check on (verified 2026-11-19).
+skip_nonce_check = true
 email_optional = false
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS) standard.
