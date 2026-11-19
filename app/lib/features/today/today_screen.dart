@@ -15,6 +15,17 @@ import '../../data/providers.dart';
 import '../workouts/ui/workout_today_card.dart';
 import 'domain/usual.dart';
 
+/// Bumped when the selected Today tab is tapped again.
+final todayScrollToTopProvider = NotifierProvider<ScrollToTopRequest, int>(
+  ScrollToTopRequest.new,
+);
+
+class ScrollToTopRequest extends Notifier<int> {
+  @override
+  int build() => 0;
+  void request() => state++;
+}
+
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
   @override
@@ -26,6 +37,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   bool _syncing = false;
   String? _syncMessage;
   bool _syncError = false;
+  final _scroll = ScrollController();
 
   @override
   void initState() {
@@ -43,6 +55,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -96,6 +109,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Tapping the selected Today tab scrolls to the top; nothing else changes.
+    ref.listen(todayScrollToTopProvider, (_, _) {
+      if (_scroll.hasClients) {
+        unawaited(_scroll.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        ));
+      }
+    });
     final configured = ref.watch(backendConfiguredProvider);
     final data = ref.watch(todayDataProvider);
     final connected = configured && data.value?.connection?.isActive == true;
@@ -123,6 +146,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
       body: RefreshIndicator(
         onRefresh: _refresh,
         child: ListView(
+          controller: _scroll,
           physics: const AlwaysScrollableScrollPhysics(),
           padding: AppSpace.page,
           children: [

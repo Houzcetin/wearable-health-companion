@@ -59,6 +59,10 @@ class _WorkoutPromptHostState extends ConsumerState<WorkoutPromptHost> {
     _route = null;
     _shown = desired;
     if (desired == null) return;
+    // Captured now: the sheet can outlive this host (for example when its tab
+    // is rebuilt), and ref must not be used after the host is disposed.
+    final container = ProviderScope.containerOf(context);
+    final notifier = container.read(workoutProvider.notifier);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -74,14 +78,21 @@ class _WorkoutPromptHostState extends ConsumerState<WorkoutPromptHost> {
         );
       },
     ).whenComplete(() {
-      if (!mounted || !identical(_shown, desired)) return;
+      if (!identical(_shown, desired)) return;
       _shown = null;
       _route = null;
-      if (identical(_desired(ref.read(workoutProvider)), desired)) {
-        final notifier = ref.read(workoutProvider.notifier);
-        if (desired is WorkoutSession) {
-          notifier.clearSummary();
-        } else if (ref.read(workoutProvider).startPrompt != null) {
+      if (desired is WorkoutSession) {
+        // A summary the user has seen must never come back, even if this host
+        // was disposed while the sheet closed (which left it set before).
+        if (identical(_desired(container.read(workoutProvider)), desired)) notifier.clearSummary();
+        if (mounted) _schedule();
+        return;
+      }
+      // Prompts are answered only by the user. A sheet closed by a rebuild must
+      // not count as "Not now" or "Keep going"; it re-shows on the next host.
+      if (!mounted) return;
+      if (identical(_desired(container.read(workoutProvider)), desired)) {
+        if (container.read(workoutProvider).startPrompt != null) {
           notifier.dismissStart();
         } else {
           notifier.dismissStop();
