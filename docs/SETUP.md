@@ -94,11 +94,18 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 `seed_demo_metrics(p_user_id, p_days)` is a service-role-only RPC that inserts rows flagged `is_demo`. It refuses if the user has real rows. The app shows a "Demo data" chip for such rows. Demo rows appear on Today even before Google Health is connected (only after health-data consent), with a "Sample data, not from your device" note.
 
 ## Stage 5 backend (done 2026-11-13)
-**Function secrets** (`supabase secrets set`, values only in `.env`):
+**Function secrets** (`supabase secrets set`, values only in `.env`; [`.env.example`](../.env.example) lists every name):
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`: injected by hosted Supabase, so you do not set them. They are needed in `.env` only for local runs.
+- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`: the web OAuth client, used by `health-oauth-start`, `health-oauth-callback` and `sync-worker`.
+- `OAUTH_STATE_SECRET`: signs the OAuth `state` (random, 32+ bytes).
 - `ANTHROPIC_API_KEY`: the coach's Claude key. Set a spending limit in the Anthropic console.
 - `HEALTH_WEBHOOK_SECRET`: Google sends `Bearer <secret>` in `Authorization` on every webhook call.
 - `SYNC_CRON_SECRET`: pg_cron sends it to `sync-worker` in `x-cron-secret`.
 - Optional: `COACH_MODEL` (default `claude-opus-5-5`), `COACH_DAILY_LIMIT` (default 30 questions per 24 h).
+
+**App settings** are not function secrets. They go in the git-ignored `.env.json` (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`) and are passed with `flutter run --dart-define-from-file=../.env.json`. The Android client needs no ID in the app; it is matched by package name and SHA-1.
+
+**CLI only:** `SUPABASE_DB_PASSWORD` (read by the Supabase CLI) and `GOOGLE_CLOUD_PROJECT_NUMBER` (for manual gcloud/curl calls). Our code reads neither.
 
 **Vault entries** (read by `run_scheduled_sync()`): `project_url` (`https://ftgozpdlwcoiwynqcslh.supabase.co`) and `sync_cron_secret` (same value as `SYNC_CRON_SECRET`). If either is missing, the cron job only enqueues and logs `scheduled_sync_missing_configuration`.
 

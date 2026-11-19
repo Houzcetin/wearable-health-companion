@@ -145,7 +145,7 @@ health-app/
     migrations/20261106000000_init.sql
     functions/{_shared,health-oauth-start,health-oauth-callback,health-webhook,sync-worker,coach,export-data,delete-account}/
     config.toml
-  .env.example              # GOOGLE_CLIENT_ID/SECRET, HEALTH_WEBHOOK_SECRET, ANTHROPIC_API_KEY…
+  .env.example              # every variable name (no values): see docs/SETUP.md
 ```
 Development runs against a hosted Supabase dev project, because webhooks need a public HTTPS endpoint. Local Supabase covers schema and unit work.
 
