@@ -60,7 +60,7 @@ Three triggers feed one queue: the user's **Sync now**, a **15-minute pg_cron jo
 - **Backfill.** Connecting queues today plus the previous 35 local dates. Rollup limits (14 days for calories, 90 for steps) force several requests.
 - **Civil dates.** Google rolls up by civil date, so everything is keyed by the user's local date and timezone.
 
-Open points: two assumptions about Google's wire shapes remain marked `UNVERIFIED` in code until checked against a longer real-account run (SETUP.md, "Open items").
+Open points: 11 assumptions about Google's wire shapes are marked `UNVERIFIED` in code until checked against a real account (SETUP.md, "Open items").
 
 ## 6. Coach design and evaluation
 
@@ -121,10 +121,10 @@ The QA review found the following. **Fixes are in progress; each item will be up
 | Flutter widget and unit tests (VM) | Today, Trends, Coach, Settings, auth flow, usual-range math, workout detector, repository, pending queue, notifications bridge, history review | 355 tests passing in one local run, plus 12 screenshot tests that run on demand |
 | Workout tests on Chrome | The workout widget and detector suites also run with `flutter test --platform chrome`; this found a web integer-shift bug (32-bit shifts) now guarded by a source-scan test | 57 tests in that command |
 | Deno tests (Edge Functions) | Webhook signature, queue, mapping, worker, coach tools and handler, export, delete, routes | ≈ 88 test blocks counted from source (the standard runner was not available in the documentation workspace) |
-| Golden fixture | `workout_motion_history.json` read by the Dart golden test and by RunnerTests' `testMotionHistoryGolden`, so Dart and Swift produce the same bouts | 24 cases |
+| Golden fixture | `workout_motion_history.json` read by the Dart golden test and by RunnerTests' `testMotionHistoryGolden`, so Dart and Swift produce the same bouts | 27 cases |
 | iOS RunnerTests | Replay helper, active-marker expiry, revision handling | 4 test functions, run on a Mac with ⌘U |
 | Coach evaluation | 26 questions × 3 repeats, rule-based checks with their own unit tests | 78 answers per run |
-| Screenshot generator | `SCREENSHOTS=1 flutter test --tags screenshots test/screenshots` renders the main screens in light and dark | 19 images in `docs/screenshots/` |
+| Screenshot generator | `SCREENSHOTS=1 flutter test --tags screenshots test/screenshots` renders the main screens in light and dark | 18 images in `docs/screenshots/` |
 | QA review | Mutation-style checks of the tests and the real-PostgreSQL RLS test | Reported by QA; the scripts are not in the repository |
 | Static analysis | `flutter analyze --no-fatal-infos`: no errors or warnings (SDK deprecation infos remain) | – |
 
