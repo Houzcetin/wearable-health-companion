@@ -49,16 +49,22 @@ class SupabaseProfileRepository implements ProfileRepository {
   Future<Profile> fetchProfile(String userId) async {
     final row = await _client
         .from('profiles')
-        .select('user_id,display_name,timezone,health_consent_at,coach_consent_at')
+        .select(
+          'user_id,display_name,timezone,health_consent_at,coach_consent_at',
+        )
         .eq('user_id', userId)
         .single();
     final timezone = await _deviceTimezone();
     if (timezone.isNotEmpty && timezone != row['timezone']) {
-      await _client
-          .from('profiles')
-          .update({'timezone': timezone})
-          .eq('user_id', userId);
-      row['timezone'] = timezone;
+      try {
+        await _client
+            .from('profiles')
+            .update({'timezone': timezone})
+            .eq('user_id', userId);
+        row['timezone'] = timezone;
+      } catch (_) {
+        // Keep the stored timezone and allow onboarding to continue.
+      }
     }
     return Profile.fromJson(row);
   }

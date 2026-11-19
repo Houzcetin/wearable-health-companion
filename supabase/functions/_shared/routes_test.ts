@@ -161,8 +161,11 @@ Deno.test("OAuth callback uses only fixed short reason codes for every failure s
   }
 });
 
-Deno.test("worker accepts verified users or the exact service key and rejects unverified JWTs", async () => {
+Deno.test("worker verifies user JWTs and scopes claims; only the exact service key claims globally", async () => {
   const authenticated: string[] = [];
+  const claims: unknown[] = [];
+  const remainingScopes: (string | null)[] = [];
+  let rateChecks = 0;
   await mocked(async (input, init) => {
     const url = String(input);
     if (url.endsWith("/auth/v1/user")) {
@@ -172,28 +175,54 @@ Deno.test("worker accepts verified users or the exact service key and rejects un
         ? Response.json({ id: userId })
         : Response.json({ message: "invalid JWT" }, { status: 401 });
     }
-    if (url.endsWith("/claim_sync_jobs")) return Response.json([]);
+    assertEquals(new Headers(init?.headers).get("Authorization"), "Bearer test-service-key");
+    if (url.endsWith("/try_start_user_sync")) {
+      assertEquals(JSON.parse(String(init?.body)), { p_user_id: userId });
+      rateChecks++;
+      return Response.json(true);
+    }
+    if (url.endsWith("/claim_sync_jobs")) {
+      claims.push(JSON.parse(String(init?.body)));
+      return Response.json([]);
+    }
+    assertEquals(new URL(url).pathname, "/rest/v1/sync_queue");
+    remainingScopes.push(new URL(url).searchParams.get("user_id"));
     return new Response(null, { headers: { "Content-Range": "*/0" } });
   }, async () => {
-    for (const token of ["test-user-jwt", "test-service-key"]) {
+    for (
+      const token of ["test-user-jwt", "forged-jwt", "test-service-key-extra", "test-service-key"]
+    ) {
       const response = await sync(
         new Request("https://example.test/sync", {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, "x-cron-secret": "wrong" },
+          body: JSON.stringify({ p_user_id: "someone-else", user_id: "someone-else" }),
         }),
       );
-      assertEquals(response.status, 200);
-      assertEquals(await response.json(), { processed: 0, failed: 0, remaining: 0 });
+      const accepted = token === "test-service-key" || token === "test-user-jwt";
+      assertEquals(response.status, accepted ? 200 : 401);
+      assertEquals(
+        await response.json(),
+        accepted
+          ? { processed: 0, failed: 0, remaining: 0 }
+          : { error: "unauthorized" },
+      );
     }
     assertEquals(
       (await sync(
         new Request("https://example.test/sync", {
           method: "POST",
-          headers: { Authorization: "Bearer forged-jwt" },
         }),
       )).status,
       401,
     );
-    assertEquals(authenticated, ["Bearer test-user-jwt", "Bearer forged-jwt"]);
+    assertEquals(authenticated, [
+      "Bearer test-user-jwt",
+      "Bearer forged-jwt",
+      "Bearer test-service-key-extra",
+    ]);
+    assertEquals(rateChecks, 1);
+    assertEquals(claims, [{ batch_size: 25, p_user_id: userId }, { batch_size: 25 }]);
+    assertEquals(remainingScopes, [`eq.${userId}`, null]);
   });
 });

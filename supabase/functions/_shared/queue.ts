@@ -39,7 +39,7 @@ function check(error: { code?: string } | null): void {
   if (error) throw new QueueError("database_error");
 }
 
-export function createQueueStore(client: SupabaseClient): QueueStore {
+export function createQueueStore(client: SupabaseClient, userId?: string): QueueStore {
   async function returnToPending(job: SyncJob, fields: Record<string, unknown>): Promise<void> {
     const { error } = await client.from("sync_queue").update({ status: "pending", ...fields })
       .eq("id", job.id).eq("status", "running");
@@ -59,21 +59,28 @@ export function createQueueStore(client: SupabaseClient): QueueStore {
 
   return {
     async claim(size) {
-      const { data, error } = await client.rpc("claim_sync_jobs", { batch_size: size });
+      const { data, error } = await client.rpc("claim_sync_jobs", {
+        batch_size: size,
+        ...(userId === undefined ? {} : { p_user_id: userId }),
+      });
       check(error);
       if (!Array.isArray(data)) throw new QueueError("queue_response");
       return data as SyncJob[];
     },
     async userContext(userId) {
-      const [profile, connection, token] = await Promise.all([
-        client.from("profiles").select("timezone").eq("user_id", userId).maybeSingle(),
+      const profile = await client.from("profiles").select("timezone,health_consent_at")
+        .eq("user_id", userId).maybeSingle();
+      check(profile.error);
+      if (!profile.data?.health_consent_at) {
+        throw new QueueError("health_consent_required", false);
+      }
+      const [connection, token] = await Promise.all([
         client.from("health_connections").select("status,health_user_id,scopes").eq(
           "user_id",
           userId,
         ).maybeSingle(),
         client.rpc("get_health_refresh_token", { p_user_id: userId }),
       ]);
-      check(profile.error);
       check(connection.error);
       check(token.error);
       if (connection.data?.status !== "active") throw new QueueError("connection_inactive", false);
@@ -153,11 +160,13 @@ export function createQueueStore(client: SupabaseClient): QueueStore {
       check(error);
     },
     async remaining() {
-      const { count, error } = await client.from("sync_queue").select("id", {
+      let query = client.from("sync_queue").select("id", {
         count: "exact",
         head: true,
       })
         .in("status", ["pending", "running"]);
+      if (userId !== undefined) query = query.eq("user_id", userId);
+      const { count, error } = await query;
       check(error);
       return count ?? 0;
     },

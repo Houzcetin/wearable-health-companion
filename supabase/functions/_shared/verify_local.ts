@@ -16,6 +16,7 @@ try {
   await import("./state_test.ts");
   await import("./worker_test.ts");
   await import("./queue_test.ts");
+  await import("./supabase_test.ts");
   await import("./routes_test.ts");
   await import("./webhook_signature_test.ts");
   await import("./coach_tools_test.ts");
