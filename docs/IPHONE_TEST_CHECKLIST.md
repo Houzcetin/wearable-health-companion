@@ -134,12 +134,15 @@ iOS decides when background refresh runs (the earliest request is an hour away),
 
 | # | Step | Expected | Done |
 |---|---|---|---|
-| 8.1 | Go offline (airplane mode), finish and save a workout. | It is kept in the pending queue and shown in Today's workouts. | ☐ |
+| 8.1 | Go offline (airplane mode), finish and save a workout while signed in with health consent. | It is kept in the pending queue (`workouts.pending.v1.<user id>`) and shown in Today's workouts. | ☐ |
 | 8.2 | Go online. | It syncs and appears in Supabase once, with no duplicate. | ☐ |
-| 8.3 | While a workout is still pending, **Sign out** (Settings). | The queue for that account is not visible to the next account. Record what happens to it after signing back in. | ☐ |
-| 8.4 | **Delete health data**. | Google Health disconnects, health data is removed, the account stays. Workouts pending for that account are cleared. | ☐ |
-| 8.5 | **Delete account**. | The account and data are removed and you return to the intro. Pending workouts are gone. | ☐ |
-| 8.6 | Queue limits: more than 200 pending rows, or rows older than 30 days. | The oldest are dropped silently (documented behaviour). | ☐ |
+| 8.3 | Save a workout offline, then **Sign out** (Settings). Sign back in with the same account, online. | Signing out clears that user's pending queue and its corrupt-data backup. The unsynced workout is **gone** and is not uploaded after sign-in. | ☐ |
+| 8.4 | Save a workout offline, then withdraw health consent (or **Delete health data**) and confirm. | On success the user's pending queue is cleared, **even if consent was already off**, and the workout does not reappear later. | ☐ |
+| 8.5 | Save a workout offline, then **Delete account** and confirm. | On success the pending queue is cleared before the sign-out; the account and data are removed and you return to the intro. | ☐ |
+| 8.6 | Repeat 8.4 and 8.5 with the network off or the server failing, so the delete **fails**. | The error "Could not delete your health data" (or "…finish deleting your account") is shown and the pending queue is **kept**; nothing is lost. Retry succeeds. | ☐ |
+| 8.7 | Start the app with health consent already off and a pending workout from an earlier grant. | The queue is not cleared (rows stay paused) and syncs after consent is granted again. Only an actual withdrawal while the app runs clears it. | ☐ |
+| 8.8 | A workout saved while signed out or without consent. | It is kept for this app session only and is gone after a restart. | ☐ |
+| 8.9 | Queue limits: more than 200 pending rows, or rows older than 30 days. | The oldest are dropped silently (documented behaviour). | ☐ |
 
 ## 9. Look and feel
 

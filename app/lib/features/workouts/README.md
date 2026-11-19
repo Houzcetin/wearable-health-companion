@@ -96,6 +96,25 @@ path (such as PendingIntent transitions), a durable detector/session, and an
 appropriately declared foreground service for continuous tracking, with the
 corresponding runtime permissions and battery/background restrictions handled.
 
+## Local data cleanup
+
+Pending workouts live under `workouts.pending.v1.<user id>`, with a
+`workouts.pending.v1.<user id>.corrupt` backup if the stored value could not be
+read. They are cleared by `clearLocalWorkoutData(userId)`, which also makes old
+queue handles ignore late saves so deleted data cannot come back:
+
+- **Delete health data** and **Delete account** call it after the server deletion
+  succeeds, even when health consent is already off. If the server deletion
+  fails, the queue is kept so nothing is lost and the user can retry.
+- `workoutQueuePrivacyProvider` calls it on sign-out (the signed-in user becomes
+  null) and when health consent changes from granted to withdrawn while the app
+  runs. Starting the app with consent already off does not clear the queue, so
+  rows paused by RLS stay available for a later grant.
+- A failed local clear is reported but does not block sign-out or deletion.
+
+Workouts saved while signed out or without consent live in memory and last for
+the app session only.
+
 ## Shared motion history golden
 
 [`test/fixtures/workout_motion_history.json`](../../../test/fixtures/workout_motion_history.json)
