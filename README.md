@@ -50,6 +50,7 @@ Without `.env.json` the app still runs as an offline shell.
 Copy `.env.example` to `.env` and fill in the values. Create `.env.json` for the app as described in `.env.example`. Never commit either file.
 
 ## Docs
+- [Handoff: state, backlog, decisions and gotchas](docs/HANDOFF.md)
 - [Plan and roadmap](docs/PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Google Health API notes](docs/API_NOTES.md)
