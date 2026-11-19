@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/theme.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/demo/demo_mode.dart';
 import '../../core/widgets/connect_prompt.dart';
 import '../../core/widgets/usual_range_bar.dart';
 import '../../data/daily_metrics.dart';
@@ -72,6 +73,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
               ? 'Some data could not sync. Please try again.'
               : result.remaining > 0
               ? 'More data is waiting to sync. Tap Sync now again shortly.'
+              : ref.read(demoModeProvider)
+              ? 'Demo mode: nothing was synced.'
               : 'Sync finished.';
         });
       }

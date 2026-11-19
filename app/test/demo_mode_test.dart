@@ -5,6 +5,9 @@ import 'package:wearable_companion/core/demo/demo_data.dart';
 import 'package:wearable_companion/core/demo/demo_mode.dart';
 import 'package:wearable_companion/core/demo/demo_overrides.dart';
 import 'package:wearable_companion/core/demo/demo_repositories.dart';
+import 'package:wearable_companion/features/today/domain/usual.dart';
+import 'package:wearable_companion/features/workouts/workout_provider.dart';
+import 'dart:io';
 import 'package:wearable_companion/data/providers.dart';
 import 'package:wearable_companion/main.dart';
 
@@ -116,6 +119,65 @@ void main() {
     expect(rows.first.date, DateTime(2030, 3, 15 - demoDays));
     expect(rows.every((r) => r.isDemo && r.sleepMinutes != null), isTrue);
     expect(rows.where((r) => r.sleepMinutes! < 340).length, greaterThan(1));
+  });
+
+  testWidgets('demo opens on Today with no workout sheet on top', (tester) async {
+    tester.view.physicalSize = const Size(780, 1688);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final container = ProviderContainer(overrides: demoOverrides());
+    addTearDown(container.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const HealthCompanionApp(),
+    ));
+    await tester.pumpAndSettle();
+    // Let the workout and history checks finish.
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(seconds: 15));
+    }
+    await tester.pumpAndSettle();
+    final state = container.read(workoutProvider);
+    expect(state.summary, isNull);
+    expect(state.startPrompt, isNull);
+    expect(state.stopPrompt, isNull);
+    expect(find.textContaining('summary'), findsNothing);
+    expect(find.text('Today'), findsWidgets);
+    expect(find.text("Today's workouts"), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Sync now in demo says nothing was synced', (tester) async {
+    await openDemo(tester);
+    await tester.tap(find.text('Sync now'));
+    await tester.pumpAndSettle();
+    expect(find.text('Demo mode: nothing was synced.'), findsOneWidget);
+    expect(find.text('Sync finished.'), findsNothing);
+  });
+
+  test('the coach baseline is the same typical the cards use', () async {
+    final today = DateTime(2030, 3, 15, 9, 30);
+    final typical = calculateUsual(demoRows(today), today).sleep.usual!;
+    final history = await DemoCoachRepository().latestThread('demo-user');
+    final answer = history.firstWhere((m) => !m.isUser && m.facts.isNotEmpty);
+    final compare = (answer.facts['tools'] as List).single as Map;
+    final result = compare['result'] as Map;
+    final b = result['b'] as Map;
+    expect(b['median'], typical);
+    expect(result['b'] is Map && b['nights_with_data'] == 28, isTrue);
+    final typicalText = '${typical.round() ~/ 60} h '
+        '${(typical.round() % 60).toString().padLeft(2, '0')} min';
+    expect(answer.content, contains('a typical $typicalText'));
+  });
+
+  test('web title and description name the app', () {
+    final html = File('web/index.html').readAsStringSync();
+    expect(html, contains('<title>Wearable Health Companion</title>'));
+    expect(html, isNot(contains('A new Flutter project')));
+    final manifest = File('web/manifest.json').readAsStringSync();
+    expect(manifest, contains('"name": "Wearable Health Companion"'));
+    expect(manifest, isNot(contains('A new Flutter project')));
   });
 
   test('demo mode is off by default', () {
