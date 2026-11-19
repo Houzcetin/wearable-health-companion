@@ -2,19 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/demo/demo_overrides.dart';
 import 'core/env.dart';
 import 'core/router.dart';
 import 'core/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Env.hasBackend) {
+  // Demo mode never contacts a backend, even when SUPABASE_* are defined.
+  if (Env.hasBackend && !Env.demoMode) {
     await Supabase.initialize(
       url: Env.supabaseUrl,
       publishableKey: Env.supabasePublishableKey,
     );
   }
-  runApp(const ProviderScope(child: HealthCompanionApp()));
+  runApp(
+    ProviderScope(
+      overrides: Env.demoMode ? demoOverrides() : const [],
+      child: const HealthCompanionApp(),
+    ),
+  );
 }
 
 class HealthCompanionApp extends ConsumerWidget {
