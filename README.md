@@ -2,6 +2,8 @@
 
 **See what changed from your usual in 10 seconds.**
 
+[![CI](https://github.com/Houzcetin/wearable-health-companion/actions/workflows/ci.yml/badge.svg)](https://github.com/Houzcetin/wearable-health-companion/actions/workflows/ci.yml)
+
 A companion app for the Fitbit Air. It reads sleep, heart rate and activity through the official Google Health API, shows a one-screen daily summary with weekly and monthly trends, and has an AI coach that explains changes using the user's own numbers.
 
 Semester project 15, Gen-AI / Mechatronics Lab, Fall 2026.
@@ -31,6 +33,9 @@ cd app
 flutter run --dart-define-from-file=../.env.json
 ```
 Without `.env.json` the app still runs as an offline shell.
+
+## Continuous integration
+`.github/workflows/ci.yml` runs on every pull request and push to `main`: `flutter analyze` and `flutter test` (Flutter 3.50.0), the workout tests on Chrome, and the Deno tests and type checks for the Edge Functions. It uses no secrets. To run the same checks locally, see `app/lib/features/workouts/README.md` and `supabase/functions/README.md`.
 
 ## Configuration
 Copy `.env.example` to `.env` and fill in the values. Create `.env.json` for the app as described in `.env.example`. Never commit either file.
