@@ -207,6 +207,37 @@ void main() {
     },
   );
 
+  test('accepting the stop prompt ends at last movement, like timeout', () {
+    steps(1000);
+    start();
+    steps(2000);
+    activity(ActivityType.still);
+    final lastMovement = now;
+    advance(const Duration(minutes: 5));
+    expect(detector.phase, DetectorPhase.promptingStop);
+    advance(const Duration(seconds: 30));
+    detector.acceptStop();
+    final session = detector.finishedSession!;
+    expect(session.endedAt, lastMovement);
+    expect(session.measuredAt, lastMovement);
+    expect(session.duration, const Duration(minutes: 10));
+    expect(session.steps, 1000);
+    expect(session.distanceMeters, 750);
+    expect(session.calories, closeTo(3.5 * 3.5 * 70 / 200 * 10, 0.001));
+  });
+
+  test('manual Stop while moving ends at the current clock', () {
+    start();
+    now = now.add(const Duration(seconds: 37));
+    expect(detector.phase, DetectorPhase.active);
+    detector.acceptStop();
+    expect(detector.finishedSession!.endedAt, now);
+    expect(
+      detector.finishedSession!.duration,
+      const Duration(minutes: 10, seconds: 37),
+    );
+  });
+
   test(
     'pedometer movement cancels a stop prompt even while OS reports still',
     () {

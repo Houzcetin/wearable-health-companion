@@ -4,7 +4,7 @@ import '../domain/activity_sample.dart';
 import '../domain/auto_workout_detector.dart';
 import 'activity_sources.dart';
 
-/// The notifier advances this clock on each real 15-second tick. Tests may
+/// The notifier advances this clock on each real 4-second simulator tick. Tests may
 /// advance it directly. Prompts and metrics use the same accelerated time.
 class SimulationClock {
   SimulationClock({required DateTime startedAt, this.timeAcceleration = 20})

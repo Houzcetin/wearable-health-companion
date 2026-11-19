@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme.dart';
 import '../../../core/widgets/app_card.dart';
+import '../domain/activity_sample.dart';
 import '../workout_provider.dart';
 import 'workout_sheets.dart';
 
@@ -78,7 +79,9 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
                 style: theme.textTheme.titleLarge,
               ),
               Text(
-                '${_steps(session.steps)} steps · ${(session.distanceMeters / 1000).toStringAsFixed(2)} km',
+                session.type == ExerciseType.bike
+                    ? bikeDistanceNote
+                    : '${_steps(session.steps)} steps · ${(session.distanceMeters / 1000).toStringAsFixed(2)} km',
                 style: body?.copyWith(color: muted),
               ),
               FilledButton.tonal(
@@ -95,7 +98,8 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
                 state.autoStart ? 'Watching' : 'Auto-start prompts off',
                 style: body?.copyWith(color: muted),
               ),
-            if (state.sensorNotice != null) Text(state.sensorNotice!, style: note),
+            if (state.sensorNotice != null)
+              Text(state.sensorNotice!, style: note),
             if (state.simulator) Text('Simulator · 20× speed', style: note),
             if (state.historyNotice != null)
               Text(state.historyNotice!, style: note),
@@ -104,10 +108,16 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
               Text(
                 'Did you ${review.type.name == 'bike' ? 'cycle' : review.type.name} '
                 '${DateFormat.Hm().format(review.startedAt.toLocal())}–'
-                '${DateFormat.Hm().format(review.endedAt!.toLocal())}? '
-                '${review.steps > 0 ? '${NumberFormat.decimalPattern().format(review.steps)} steps' : 'Steps unavailable'}',
+                '${DateFormat.Hm().format(review.endedAt!.toLocal())}?'
+                '${review.type == ExerciseType.bike
+                    ? ''
+                    : review.steps > 0
+                    ? ' ${NumberFormat.decimalPattern().format(review.steps)} steps'
+                    : ' Steps unavailable'}',
                 style: body?.copyWith(fontWeight: FontWeight.w600),
               ),
+              if (review.type == ExerciseType.bike)
+                Text(bikeDistanceNote, style: note),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -135,7 +145,8 @@ class _WorkoutTodayCardState extends ConsumerState<WorkoutTodayCard> {
                   contentPadding: EdgeInsets.zero,
                   title: Text(workout.type.label),
                   subtitle: Text(
-                    '${DateFormat.Hm().format(workout.startedAt.toLocal())} · ${_minutes(workout.duration)} · ${_steps(workout.steps)} steps',
+                    '${DateFormat.Hm().format(workout.startedAt.toLocal())} · ${_minutes(workout.duration)}'
+                    '${workout.type == ExerciseType.bike ? '' : ' · ${_steps(workout.steps)} steps'}',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => showWorkoutSummary(context, workout),
