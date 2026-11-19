@@ -22,22 +22,40 @@ insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-000000000002', 'security-b@example.test'),
   ('00000000-0000-4000-8000-000000000003', 'security-c@example.test');
 
--- The trigger checks both inserts and updates, and accepts real catalog names.
-delete from public.profiles where user_id = '00000000-0000-4000-8000-000000000003';
-select pg_temp.expect_error($sql$
-  insert into public.profiles (user_id, timezone)
-  values ('00000000-0000-4000-8000-000000000003', 'Invalid/Zone')
-$sql$, '22023', 'invalid timezone');
-insert into public.profiles (user_id, timezone)
-values ('00000000-0000-4000-8000-000000000003', 'Europe/Istanbul');
-select pg_temp.expect_error($sql$
-  update public.profiles set timezone = repeat('x', 65)
-  where user_id = '00000000-0000-4000-8000-000000000003'
-$sql$, '22023', 'invalid timezone');
-select pg_temp.expect_error($sql$
-  update public.profiles set timezone = null
-  where user_id = '00000000-0000-4000-8000-000000000003'
-$sql$, '22023', 'invalid timezone');
+-- Both insert and update normalize aliases before catalog lookup, without raising.
+do $$
+declare sample record; actual text;
+begin
+  for sample in select * from (values
+    ('Europe/Kiev', 'Europe/Kyiv'),
+    ('Asia/Calcutta', 'Asia/Kolkata'),
+    ('Asia/Saigon', 'Asia/Ho_Chi_Minh'),
+    ('Asia/Katmandu', 'Asia/Kathmandu'),
+    ('US/Eastern', 'America/New_York'),
+    ('Europe/Istanbul', 'Europe/Istanbul'),
+    ('Etc/GMT+5', 'Etc/GMT+5'),
+    ('Etc/Unknown', 'UTC'),
+    ('Invalid/Zone', 'UTC'),
+    ('UTC; drop table x', 'UTC'),
+    (repeat('x', 70), 'UTC'),
+    ('', 'UTC'),
+    (null, 'UTC')
+  ) as cases(input, expected) loop
+    delete from public.profiles where user_id = '00000000-0000-4000-8000-000000000003';
+    insert into public.profiles (user_id, timezone)
+    values ('00000000-0000-4000-8000-000000000003', sample.input)
+    returning timezone into actual;
+    assert actual = sample.expected,
+      format('Insert timezone %L became %L, expected %L', sample.input, actual, sample.expected);
+    update public.profiles set timezone = 'Europe/Istanbul'
+    where user_id = '00000000-0000-4000-8000-000000000003';
+    update public.profiles set timezone = sample.input
+    where user_id = '00000000-0000-4000-8000-000000000003'
+    returning timezone into actual;
+    assert actual = sample.expected,
+      format('Update timezone %L became %L, expected %L', sample.input, actual, sample.expected);
+  end loop;
+end $$;
 
 -- Connection creation and token rotation must enforce consent even for the service RPC.
 select pg_temp.expect_error($sql$
@@ -61,6 +79,22 @@ select pg_temp.expect_error($sql$
 $sql$, '42501', 'health consent required');
 insert into public.consent_events (user_id, kind, granted)
 values ('00000000-0000-4000-8000-000000000001', 'health_data', true);
+
+-- Normalized device timezones still allow the scheduled worker to enqueue jobs.
+do $$
+declare timezone_input text;
+begin
+  foreach timezone_input in array array[
+    'Europe/Kiev', 'Asia/Calcutta', 'Asia/Saigon', 'Etc/Unknown',
+    'UTC; drop table x', repeat('x', 70), null
+  ] loop
+    update public.profiles set timezone = timezone_input
+    where user_id = '00000000-0000-4000-8000-000000000001';
+    assert public.enqueue_recent_sync(2) = 27, 'normalized timezones must enqueue three dates, nine types';
+    assert public.enqueue_recent_sync(2) = 0, 'recent sync must remain idempotent';
+    delete from public.sync_queue where user_id = '00000000-0000-4000-8000-000000000001';
+  end loop;
+end $$;
 
 -- Simulate a bypassed legacy timezone to exercise all five defensive RPC bodies.
 alter table public.profiles disable trigger profiles_validate_timezone;
@@ -88,9 +122,14 @@ insert into public.friendships (user_a, user_b)
 values ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002');
 
 set local role authenticated;
-select pg_temp.expect_error($sql$
-  update public.profiles set timezone = 'Invalid/Zone' where user_id = auth.uid()
-$sql$, '22023', 'invalid timezone');
+update public.profiles set timezone = 'Europe/Kiev' where user_id = auth.uid();
+do $$ begin
+  assert (select timezone = 'Europe/Kyiv' from public.profiles where user_id = auth.uid());
+end $$;
+update public.profiles set timezone = 'UTC; drop table x' where user_id = auth.uid();
+do $$ begin
+  assert (select timezone = 'UTC' from public.profiles where user_id = auth.uid());
+end $$;
 select pg_temp.expect_error($sql$
   select public.join_challenge(current_setting('security_test.challenge_id')::bigint)
 $sql$, '42501', 'sharing consent required');

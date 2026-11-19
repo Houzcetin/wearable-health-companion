@@ -42,24 +42,60 @@ revoke execute on function public.claim_sync_jobs(int, uuid), public.try_start_u
 grant execute on function public.claim_sync_jobs(int, uuid), public.try_start_user_sync(uuid)
   to service_role;
 
--- Validate new timezone writes and repair legacy values before using them in dates.
-update public.profiles p
-   set timezone = 'UTC'
- where char_length(p.timezone) > 64
-    or not exists (select 1 from pg_timezone_names where name = p.timezone);
-
+-- Normalize device timezone names without blocking profile creation or onboarding.
 create or replace function public.validate_profile_timezone()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if new.timezone is null or char_length(new.timezone) > 64
-     or not exists (select 1 from pg_timezone_names where name = new.timezone) then
-    raise exception 'invalid timezone' using errcode = '22023';
-  end if;
+  new.timezone := case
+    when new.timezone is null or char_length(new.timezone) > 64
+      or new.timezone !~ '^[A-Za-z0-9_+/-]+$' then 'UTC'
+    else coalesce(
+      -- Prefer the current spelling even when the catalog also has the alias.
+      (select name from pg_timezone_names where name = case new.timezone
+        when 'Europe/Kiev' then 'Europe/Kyiv'
+        when 'Europe/Uzhgorod' then 'Europe/Kyiv'
+        when 'Europe/Zaporozhye' then 'Europe/Kyiv'
+        when 'Asia/Calcutta' then 'Asia/Kolkata'
+        when 'Asia/Saigon' then 'Asia/Ho_Chi_Minh'
+        when 'Asia/Katmandu' then 'Asia/Kathmandu'
+        when 'Asia/Rangoon' then 'Asia/Yangon'
+        when 'Asia/Dacca' then 'Asia/Dhaka'
+        when 'Asia/Thimbu' then 'Asia/Thimphu'
+        when 'Asia/Ashkhabad' then 'Asia/Ashgabat'
+        when 'Asia/Ujung_Pandang' then 'Asia/Makassar'
+        when 'Asia/Chungking' then 'Asia/Shanghai'
+        when 'Asia/Chongqing' then 'Asia/Shanghai'
+        when 'Asia/Harbin' then 'Asia/Shanghai'
+        when 'Asia/Tel_Aviv' then 'Asia/Jerusalem'
+        when 'Asia/Istanbul' then 'Europe/Istanbul'
+        when 'Asia/Macao' then 'Asia/Macau'
+        when 'Asia/Ulan_Bator' then 'Asia/Ulaanbaatar'
+        when 'Africa/Asmera' then 'Africa/Asmara'
+        when 'America/Godthab' then 'America/Nuuk'
+        when 'Pacific/Truk' then 'Pacific/Chuuk'
+        when 'Pacific/Ponape' then 'Pacific/Pohnpei'
+        when 'Pacific/Enderbury' then 'Pacific/Kanton'
+        when 'US/Eastern' then 'America/New_York'
+        when 'US/Central' then 'America/Chicago'
+        when 'US/Mountain' then 'America/Denver'
+        when 'US/Pacific' then 'America/Los_Angeles'
+        when 'US/Alaska' then 'America/Anchorage'
+        when 'US/Aleutian' then 'America/Adak'
+        when 'US/Arizona' then 'America/Phoenix'
+        when 'US/Hawaii' then 'Pacific/Honolulu'
+      end),
+      -- Older catalogs may have only the legacy spelling; keep it when valid.
+      (select name from pg_timezone_names where name = new.timezone),
+      'UTC')
+  end;
   return new;
 end $$;
 
 create trigger profiles_validate_timezone before insert or update of timezone on public.profiles
   for each row execute function public.validate_profile_timezone();
+
+-- Repair every existing value through the same trigger, including catalog aliases.
+update public.profiles set timezone = timezone;
 
 -- Resolve timezone names through PostgreSQL's catalog even for legacy/bypassed writes.
 
