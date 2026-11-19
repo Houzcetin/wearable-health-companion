@@ -57,6 +57,24 @@ The fixtures README documents every unverified real-account assumption. No remot
 account, database, deployment or device is used by these Deno tests. PostgreSQL 16 regression and
 concurrency checks are documented in [../tests/README.md](../tests/README.md).
 
+The coach suite includes mocked 20-request concurrency tests. To also exercise the real
+reservation RPC, create an **empty scratch database** named `coach_limits_test_local` on
+PostgreSQL 16+, with a test administrator that can create roles and schemas, and install `psql`.
+From the repository root, run (adjust the local URL as needed):
+
+```sh
+COACH_TEST_DATABASE_URL=postgresql://localhost/coach_limits_test_local \
+  deno test --config supabase/functions/deno.json \
+    --allow-env=COACH_TEST_DATABASE_URL --allow-run=psql --allow-read=supabase/migrations \
+    supabase/functions/coach/reservation_postgres_test.ts
+```
+
+This opt-in test creates minimal auth/chat tables and applies only the new coach cost migration.
+It sends 20 simultaneous requests through independent PostgreSQL connections for each cap, checks
+that only 7 are accepted, and verifies permissions, the 100-question clamp and retained history.
+It leaves fixture tables in the scratch database; drop that database after the run. It is skipped
+by the normal Deno test command and requires no Anthropic key or API calls.
+
 If the standard runner aborts with Windows named-pipe error 5, the same cases can be executed
 without its IPC transport. This fallback does not replace the standard runner's resource/operation
 sanitizers:

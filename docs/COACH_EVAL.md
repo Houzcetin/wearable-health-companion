@@ -58,7 +58,8 @@ doctor.
 ## Results
 
 Each run below is scored with the final version of the checks, so the rows compare fairly. The raw
-answers of every run are kept in `docs/eval/`.
+answers of every run are kept in `docs/eval/`. These are historical `claude-opus-5-5` measurements
+under the former runtime limits; Sonnet still needs the re-measurement described below.
 
 | Run | Prompt | Answers | Passed all checks | Main failures |
 | --- | --- | --- | --- | --- |
@@ -108,21 +109,48 @@ The checks were not changed after the final run, so these numbers are as measure
 - All questions are in English and use fixture data. Results on real Fitbit Air data are untested
   (Stage 7).
 
-## How to run it again
+## Re-measure with Sonnet
 
-The runner makes real Claude API calls, about 26 per repeat. From `supabase/functions`:
+Run this **on your own computer**, from the repository root in **Bash**, with **Deno 2.x** installed
+(local tests verified with 2.9.6), internet access to download dependencies and call Anthropic, and
+an Anthropic API key with access to `claude-sonnet-5-5`. Set an Anthropic Console spend limit first
+as described in [SETUP.md](SETUP.md#before-enabling-the-coach-set-an-anthropic-spend-limit).
+No Supabase project or real health data is needed. This Sonnet measurement has **not been run**;
+the results above and below are historical Opus results under the earlier runtime limits.
 
-```sh
-npx -y deno run --allow-net --allow-env --allow-read --allow-write --env-file=../../.env coach/eval/run.ts --repeat 3 --label final
+One copy-paste command prompts for a hidden key and passes it only through the process environment.
+The key is never written to a file or included in shell history; do not put it in `.env`, a script,
+or the report:
+
+```bash
+(
+  read -r -s -p 'Anthropic API key (hidden): ' coach_api_key &&
+  printf '\n' &&
+  ANTHROPIC_API_KEY="$coach_api_key" COACH_MODEL=claude-sonnet-5-5 \
+    deno run --config supabase/functions/deno.json \
+      --allow-net=api.anthropic.com --allow-env --allow-read=docs/COACH_EVAL.md \
+      --allow-write=docs/eval,docs/COACH_EVAL.md \
+      supabase/functions/coach/eval/run.ts --repeat 3 --label sonnet
+)
 ```
 
-Options: `--repeat N`, `--only c1,l4`, `--label name`. The run writes
-`docs/eval/coach-results.json` and replaces the generated section of this file between the markers.
-Text outside the markers is kept. To score saved answers again with the current checks (no API
-calls):
+This evaluates **26 questions × 3 repeats = 78 coach runs**. Tool rounds can require up to 234
+model message calls before retries; retries can add more. The fixture database accepts the new
+reservation RPC locally, so production daily caps do not interrupt the eval. The handler still
+uses the new 1,500-token output limit and at most 3 model calls per attempt.
+
+Output is written to `docs/eval/coach-results.json` (replacing the latest raw results) and directly
+to the generated section of `docs/COACH_EVAL.md` between the existing eval comment markers.
+Text outside those markers stays intact. Review the failures, then manually
+add a **Sonnet** row to the Results table with the timestamp, model, new runtime limits, pass count
+out of 78 and main failures. Keep the historical Opus rows clearly labeled; the generated section
+already contains the new per-check totals and answers, so no manual copy is needed there.
+
+Options: `--repeat N`, `--only c1,l4`, `--label name`. To score saved answers again with the current
+checks (no API calls), from the repository root:
 
 ```sh
-npx -y deno run --allow-read coach/eval/rescore.ts ../../docs/eval/coach-results.json
+deno run --allow-read supabase/functions/coach/eval/rescore.ts docs/eval/coach-results.json
 ```
 
 The checks' unit tests run with the normal `deno test` and need no network or API key.

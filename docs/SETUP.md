@@ -2,6 +2,15 @@
 
 Secrets (keys, passwords) live only in `.env`, which is git-ignored. Flutter public settings live in the git-ignored `.env.json`, and local iOS Google IDs live in the git-ignored `app/ios/Flutter/Google.xcconfig`. This file holds IDs and steps only.
 
+## Before enabling the coach: set an Anthropic spend limit
+
+**Set a low spend limit in the [Anthropic Console](https://console.anthropic.com/) before deploying
+the coach or running the eval.** Check that the limit applies to the workspace used by your API
+key. Request caps help bound usage, but tool calls, retries and retained chat history also consume
+tokens, so configure the provider spend limit too. The eval runs on your own computer; enter its
+key only at the prompt in [Re-measure with Sonnet](COACH_EVAL.md#re-measure-with-sonnet), never in
+a file or this environment.
+
 ## Projects (created 2026-11-11)
 
 | Service | Value |
@@ -98,10 +107,19 @@ supabase config push --project-ref ftgozpdlwcoiwynqcslh
 - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`: injected by hosted Supabase, so you do not set them. They are needed in `.env` only for local runs.
 - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`: the web OAuth client, used by `health-oauth-start`, `health-oauth-callback` and `sync-worker`.
 - `OAUTH_STATE_SECRET`: signs the OAuth `state` (random, 32+ bytes).
-- `ANTHROPIC_API_KEY`: the coach's Claude key. Set a spending limit in the Anthropic console.
+- `ANTHROPIC_API_KEY`: the coach's server-side Claude key. Complete the **Anthropic spend-limit step above first**.
 - `HEALTH_WEBHOOK_SECRET`: Google sends `Bearer <secret>` in `Authorization` on every webhook call.
 - `SYNC_CRON_SECRET`: pg_cron sends it to `sync-worker` in `x-cron-secret`.
-- Optional: `COACH_MODEL` (default `claude-opus-5-5`), `COACH_DAILY_LIMIT` (default 30 questions per 24 h).
+- Optional: `COACH_MODEL` (default `claude-sonnet-5-5`), `COACH_DAILY_LIMIT` (default 30, clamped to
+  at most 100 questions per user), `COACH_GLOBAL_DAILY_LIMIT` (default 500 questions across all users).
+  Invalid or nonpositive limits use the defaults. Both use a rolling 24-hour window. Each question
+  allows at most 3 model calls with `max_tokens: 1500` each; the model override remains available.
+
+**Apply migration `20261119020000_coach_cost_limits.sql` before deploying the updated coach.** Its
+service-role-only `reserve_coach_question` RPC checks both limits and saves the user question in
+one transaction. A shared advisory lock serializes reservations across users. Accepted questions
+remain counted even if the model fails; chat logs are retained. The per-user cap returns
+`429 daily_limit`; the shared cap returns `503 coach_busy` with a readable message in the app.
 
 **App settings** are not function secrets. They go in the git-ignored `.env.json` (`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_IOS_CLIENT_ID`) and are passed with `flutter run --dart-define-from-file=../.env.json`. The Android client needs no ID in the app; it is matched by package name and SHA-1.
 

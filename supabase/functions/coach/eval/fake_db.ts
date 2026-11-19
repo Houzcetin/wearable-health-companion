@@ -16,8 +16,8 @@ export const fixtureDatabase = (user: FixtureUser) =>
             coach_consent_at: "2026-11-01T00:00:00Z",
           }));
         }
-        if (method === "POST" && url.pathname === "/rest/v1/rpc/coach_messages_today") {
-          return Promise.resolve(Response.json(0));
+        if (method === "POST" && url.pathname === "/rest/v1/rpc/reserve_coach_question") {
+          return Promise.resolve(Response.json("reserved"));
         }
         if (url.pathname === "/rest/v1/coach_messages") {
           if (method === "POST") {
