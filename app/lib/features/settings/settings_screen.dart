@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/demo/demo_mode.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/app_card.dart';
+import '../../core/widgets/connect_prompt.dart' show DemoDataChip;
 import '../../data/auth_repository.dart';
 import '../../data/health_repository.dart';
 import '../../data/providers.dart';
@@ -132,6 +134,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       error: (_, _) => 'Could not check connection',
     );
     final lastSynced = connection.value?.lastSyncedAt;
+    final demo = ref.watch(demoModeProvider);
     final danger = scheme.error;
 
     return Scaffold(
@@ -145,6 +148,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (demo) ...[
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: DemoDataChip(),
+                    ),
+                    const SizedBox(height: AppSpace.s),
+                  ],
                   AppCard(
                     padding: const EdgeInsets.fromLTRB(AppSpace.l, 14, 14, 14),
                     child: Row(children: [
@@ -198,7 +208,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               children: [
                                 Text('Google Health', style: theme.textTheme.titleSmall),
                                 Text(
-                                  lastSynced == null
+                                  demo
+                                      ? 'Demo data, not from a device'
+                                      : lastSynced == null
                                       ? 'Not synced yet'
                                       : 'Synced ${DateFormat('MMM d, h:mm a', 'en_US').format(lastSynced.toLocal())}',
                                   style: theme.textTheme.bodySmall?.copyWith(
