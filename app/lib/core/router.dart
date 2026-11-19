@@ -104,11 +104,11 @@ StatefulShellBranch _branch(String path, Widget screen) => StatefulShellBranch(
   routes: [GoRoute(path: path, builder: (_, _) => screen)],
 );
 
-class _Shell extends StatelessWidget {
+class _Shell extends ConsumerWidget {
   const _Shell({required this.shell});
   final StatefulNavigationShell shell;
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
     body: shell,
     // Play (points, streaks, challenges) stays out of the bar until it has
     // real content; an empty tab only costs a tap.
@@ -120,8 +120,15 @@ class _Shell extends StatelessWidget {
       ),
       child: NavigationBar(
         selectedIndex: shell.currentIndex,
-        onDestinationSelected: (i) =>
-            shell.goBranch(i, initialLocation: i == shell.currentIndex),
+        onDestinationSelected: (i) {
+          // Re-tapping the selected tab must not rebuild it: a reset recreates
+          // the screen and any open sheet, so only Today scrolls to the top.
+          if (i == shell.currentIndex) {
+            if (i == 0) ref.read(todayScrollToTopProvider.notifier).request();
+            return;
+          }
+          shell.goBranch(i);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.wb_sunny_outlined),
