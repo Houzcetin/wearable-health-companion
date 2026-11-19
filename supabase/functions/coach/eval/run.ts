@@ -235,7 +235,7 @@ const main = async () => {
     return;
   }
   if (!Deno.env.get("ANTHROPIC_API_KEY")) throw new Error("ANTHROPIC_API_KEY is required");
-  const model = Deno.env.get("COACH_MODEL") || "claude-opus-5-5";
+  const model = Deno.env.get("COACH_MODEL") || "claude-sonnet-5-5";
   const { createMessage } = await import("../anthropic.ts");
   const results: EvalResults = {
     label: options.label,
