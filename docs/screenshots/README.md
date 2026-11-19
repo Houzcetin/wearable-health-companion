@@ -34,3 +34,14 @@ found automatically, set `FLUTTER_ROOT`. Fixtures live in
 - Workout durations differ on purpose: a running workout shows a stopwatch
   (`10:00`, mm:ss), a finished one in Today's workouts shows a length
   (`30 min`, or `1 h 05 min` from an hour up).
+
+## Demo mode
+
+Captured from the web build with `flutter build web --dart-define=DEMO_MODE=true`, served locally and viewed at 390×844 CSS px:
+
+- `demo_web_today.png`: Today with the demo chip, a changed sleep night and the usual-range bars.
+- `demo_web_trends.png`: Trends in the week view (sleep, usual-range band, two nights outside it).
+- `demo_web_coach.png`: two prepared questions with labelled demo answers and Numbers used.
+- `demo_web_settings.png`: the demo account, "Demo data, not from a device" and export/delete blocked.
+
+Demo mode is switched on only by the `DEMO_MODE` define; these images come from the built web app, not from the widget test renderer.
