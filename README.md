@@ -7,13 +7,21 @@ A companion app for the Fitbit Air. It reads sleep, heart rate and activity thro
 Semester project 15, Gen-AI / Mechatronics Lab, Fall 2026.
 
 ## Status
-Stage 1 (kickoff). The app shell has tabs for Today, Trends, Coach, Play and Settings with placeholder screens. Google Cloud and Supabase are set up and Google sign-in is enabled. The database schema is written but not yet applied.
+The code for course stages 1 to 6 is in place: Google sign-in with a separate health-data consent, Google Health connection, sync (manual, scheduled and webhook), a one-screen Today summary with usual ranges, week and month Trends, the AI coach with its evaluation, and export and delete. An extra is automatic workout detection (walks, runs and bike rides) with start and stop prompts, notifications and iPhone history suggestions. The Stage 9 documents are written: the [user guide](docs/USER_GUIDE.md), [technical report](docs/TECHNICAL_REPORT.md), [architecture](docs/ARCHITECTURE.md) and a [cost report](docs/COST_REPORT.md) skeleton.
+
+Still open:
+- Testing on a real iPhone ([checklist](docs/IPHONE_TEST_CHECKLIST.md)) and with a real Fitbit Air account.
+- The Stage 7 five-user beta ([protocol](docs/USER_TEST_PROTOCOL.md)).
+- Security fixes from the QA review are in progress (see the technical report, "Known risks and planned fixes").
+- Real figures in the cost report.
+
+The Play tab (game layer) is a placeholder and is not part of the required MVP.
 
 ## Layout
 ```
 app/        Flutter app (Android and iOS)
-supabase/   Postgres migrations and auth config (Edge Functions come next)
-docs/       Plan, architecture, API notes, setup
+supabase/   Postgres migrations and Edge Functions
+docs/       Plan, architecture, report, guides, screenshots
 ```
 
 ## Run the app
@@ -32,6 +40,10 @@ Copy `.env.example` to `.env` and fill in the values. Create `.env.json` for the
 - [Architecture](docs/ARCHITECTURE.md)
 - [Google Health API notes](docs/API_NOTES.md)
 - [Setup: project IDs and console steps](docs/SETUP.md)
+- [Technical report](docs/TECHNICAL_REPORT.md) and [cost report](docs/COST_REPORT.md)
+- [Coach evaluation](docs/COACH_EVAL.md)
+- [User guide](docs/USER_GUIDE.md), [iPhone test checklist](docs/IPHONE_TEST_CHECKLIST.md), [user test protocol](docs/USER_TEST_PROTOCOL.md)
+- [Screenshots](docs/screenshots/README.md)
 
 ## Rules we follow
 - Team members: Oğuz Çetin and Aleksandr Gordeev. The first app shell, schema and architecture come from Aleksandr's `algordeev/health-app`. Nothing is copied from other teams.
