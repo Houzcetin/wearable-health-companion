@@ -6,7 +6,7 @@ Other documents: [PLAN.md](PLAN.md) (scope and course stages), [ARCHITECTURE.md]
 
 ## 1. Where things stand
 
-Base: `origin/main` at `b524f5b` (merge of PR #19, after PRs #20 and #21). Facts were checked against the repository at that commit and the open branches. Test counts are from local runs and may drift; CI is the source of truth.
+Base: `origin/main` at `253ca6e` (merge of PR #23, after PRs #19, #20 and #21). Facts were checked against the repository at that commit and the open branches. Test counts are from local runs and may drift; CI is the source of truth.
 
 ### On `main` and working
 
@@ -16,7 +16,7 @@ Base: `origin/main` at `b524f5b` (merge of PR #19, after PRs #20 and #21). Facts
 | Google Health connection and sync (Sync now, 15-minute cron, webhooks, backfill) | Done in code. Real-account behaviour is unverified: 13 `UNVERIFIED` markers remain. |
 | Today: lead sentence, three cards, usual ranges | Done. |
 | Trends: week and month, days outside the usual range | Done. |
-| Coach: tools, consent, daily limit, Numbers used | Done. Evaluated at 70 of 78 answers passing every check (COACH_EVAL.md). The default model on `main` is still `claude-opus-5-5`; PR #23 changes it (section 4a). |
+| Coach: tools, consent, limits, Numbers used | Done. Cost limits merged with PR #23: default model Sonnet, `max_tokens` 1500, at most 3 model calls, atomic reservation with per-user and global 24-hour limits, and limit errors show a clear message without Retry. The 70 of 78 evaluation result (COACH_EVAL.md) was measured with the earlier model and prompt; re-run it (section 4f). |
 | Export and delete (health data, account) | Done. Export scope is partial (backlog c). |
 | Workout detection: live prompts, notifications, iPhone history suggestions | Done in code. iPhone path not verified on a device. Android has live detection only. |
 | Database security hardening (PR #19) | Merged. Migration `20261119000000_security_hardening.sql`: profile timezones are normalised (section 6), sync claims are rate limited per user, privileges revoked, CHECK constraints added. |
@@ -28,7 +28,6 @@ Base: `origin/main` at `b524f5b` (merge of PR #19, after PRs #20 and #21). Facts
 
 | Item | Branch | State | Notes |
 |---|---|---|---|
-| PR #23 coach cost limits | `claude/coach-cost-limits` | **Open.** Not on `main`. | Sonnet default, `max_tokens` 1500, at most 3 model turns, `reserve_coach_question` RPC (an atomic daily count), `COACH_GLOBAL_DAILY_LIMIT`. Migration `20261119020000_coach_cost_limits.sql`, which must be applied after `20261119000000_security_hardening.sql`. |
 | Tab re-tap fix | `claude/tab-retap-fix` | **No PR yet, not merged.** | Re-tapping the selected tab no longer resets its stack; Today scrolls to the top instead. Summaries are cleared when their sheet closes. The root cause of the reported "Walk summary" re-opening was **not reproduced**; the regression tests pass without the change too. Reproduce it before you rely on this fix. |
 
 Other remote branches (`claude/auto-detect-workouts`, `claude/workouts-background`, `claude/workout-sync-*`, `claude/delete-cleanup-polish`, `claude/fix-sim-summary`, `claude/ios-google-signin-config`, `claude/peaceful-hawking-y65kgu`, `claude/readme-status`, `claude/ci-workflow`, `claude/demo-mode`, `claude/demo-polish`, `claude/security-hardening-db`) have been merged into `main` as earlier PRs. Check with `git log origin/main --oneline` before deleting any of them.
@@ -106,7 +105,8 @@ docs/                         documents above; screenshots/ (light and dark, and
 
 Priority order. Each item lists what, why, where, and when it is done.
 
-**(a) Coach cost limits: in PR #23.** *What:* the default model becomes Sonnet (`COACH_MODEL`), `max_tokens` drops to 1500 (it is 16000 on `main`), at most 3 model turns per question (6 on `main`), an atomic daily count through `reserve_coach_question`, and a global daily ceiling `COACH_GLOBAL_DAILY_LIMIT`. *Why:* the most expensive configuration is the default, and parallel requests can exceed the per-user limit on `main`. *Where:* PR #23, `supabase/functions/coach/handler.ts`, migration `20261119020000_coach_cost_limits.sql`. *Done when:* PR #23 is reviewed and merged, the migration is applied after the security migration, and COACH_EVAL is re-run with the new model (item f).
+**(a) Coach cost limits: DONE (PR #23, merged).** *What:* Sonnet default (`COACH_MODEL`), `max_tokens` 1500, at most 3 model calls, an atomic `reserve_coach_question` reservation with per-user and global (`COACH_GLOBAL_DAILY_LIMIT`) limits over a rolling 24 hours, and clear limit messages without Retry. *Where:* `supabase/functions/coach/handler.ts`, migration `20261119020000_coach_cost_limits.sql`, `app/lib/features/coach/coach_screen.dart`. *Remaining:* re-run the evaluation with the new model (item f) and apply the migration to the live project (item g).
+
 
 **(b) Mobile secure storage.** *What:* keep the Supabase session in the Keychain (iOS) and Keystore (Android), set `android:allowBackup="false"` (the manifest does not set it today, so Android backups are on), exclude the local workout queue from iOS backups, and store the pending queue (`workouts.pending.v1.<user id>` in SharedPreferences) in protected storage. *Why:* session tokens and health-adjacent data are plain text on the device and can be copied by backups. *Where:* `app/android/app/src/main/AndroidManifest.xml`, `app/lib/features/workouts/data/pending_workout_queue.dart`, the Supabase client initialisation in `app/lib/main.dart`, iOS Runner settings. *Done when:* a device backup does not contain the session or the queue, and sign-out still clears both.
 
@@ -139,7 +139,7 @@ Priority order. Each item lists what, why, where, and when it is done.
 ## 5. Decisions already made
 
 - **Records are open.** The orchestration notes say "kayıtlar açık". Confirm with the team what this covers before you act on it.
-- **The coach moves to Sonnet** as the default (backlog a, PR #23).
+- **The coach uses Sonnet as the default** (backlog a, done in PR #23).
 - **"Delete health data" does not delete derived game data.** Points, streaks and similar rows stay. The export is being extended so the user can see them (backlog c).
 - **The coach evaluation is run on the team member's own machine**, because it needs their Anthropic key.
 - **CI is in place** (PR #17). A PR is merged after CI is green and the review is done.
