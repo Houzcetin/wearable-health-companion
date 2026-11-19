@@ -40,9 +40,9 @@ We're building a better companion app for Google's $99 Fitbit Air (launched May 
 **Sync pipeline:**
 - `health-webhook` checks the Authorization header and signature, inserts rows into `sync_queue` (idempotent unique key on user, data type and date), and returns 204. It does no heavy work.
 - `scheduled-sync` calls `public.run_scheduled_sync()` every 15 minutes via pg_cron. It queues all nine types for today and the previous two local dates of every active connection, then invokes `sync-worker` once through pg_net. Vault supplies `project_url` and `sync_cron_secret`; the matching function setting is `SYNC_CRON_SECRET`. Missing Vault configuration produces a notice after enqueuing.
-- `sync-worker` accepts the constant-time cron secret, service-role bearer, or verified user JWT. A call runs one bounded worker pass, including when work remains. It refreshes access, reads the affected daily dates, upserts aggregates and records `last_synced_at`.
+- `sync-worker` accepts a verified user JWT, the constant-time cron secret, or the exact service-role bearer. Only cron/service calls claim the global queue through `claim_sync_jobs(batch_size)`; user calls use the service-only overload `claim_sync_jobs(batch_size, p_user_id)` with the verified caller's ID on every batch and return only that user's counts. Before user claims, the service-only `try_start_user_sync` RPC atomically allows one call per user per 60 seconds using `user_sync_rate_limits`; concurrent or repeated calls return HTTP 429 (`sync_rate_limited`). Cron/service calls bypass this limit. A call runs one bounded worker pass, including when work remains. Users without health consent are skipped before reading their connection or Vault token. It refreshes access, reads the affected daily dates, upserts aggregates and records `last_synced_at`.
 - Webhooks enqueue only; scheduled re-pulls cover missed notifications. First connection still uses backfill plus manual pulls.
-- The app has a "Sync now" control that queues today's date, so the live-sync demo doesn't depend on webhook timing.
+- The app's "Sync now" calls `request_sync(days_back: 1)` and immediately invokes `sync-worker` with the user's JWT, preserving the processed/failed/remaining response. A 429 displays "Sync already in progress. Try again in a minute." Manual sync does not wait for the scheduler.
 - We store **daily aggregates only**. Raw intraday streams are never stored.
 
 ## 3. Data model (Postgres, RLS on every table: `user_id = auth.uid()`)
@@ -52,6 +52,7 @@ We're building a better companion app for Google's $99 Fitbit Air (launched May 
 | `health_connections` | user_id PK, health_user_id UNIQUE, refresh_token_secret_id (Vault), scopes[], status (active/revoked/error), connected_at, last_synced_at |
 | `daily_metrics` | (user_id, date) PK; sleep_minutes, sleep_efficiency, deep/rem/light/awake_min, bedtime, wake_time, resting_hr, hrv_ms, spo2_avg, steps, active_zone_min, active_min, total_calories, updated_at |
 | `sync_queue` | id, user_id, data_type, date, status, attempts, last_error, UNIQUE(user_id, data_type, date, status='pending') |
+| `user_sync_rate_limits` | user_id PK (cascades on account deletion), last_called_at; service-role only, atomic 60-second manual worker cooldown |
 | `weekly_insights` | (user_id, week_start) PK, summary_md, facts_json, model, created_at |
 | `coach_messages` | id, user_id, thread_id, role, content, facts_json (numbers cited), created_at |
 | `consent_events` | id, user_id, kind, granted, at (audit trail) |
