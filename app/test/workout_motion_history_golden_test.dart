@@ -8,10 +8,23 @@ import 'package:wearable_companion/features/workouts/domain/workout_backfill.dar
 void main() {
   final file = File('test/fixtures/workout_motion_history.json');
   final fixture = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+  final cases = (fixture['cases'] as List).cast<Map<String, dynamic>>();
   final origin = DateTime.utc(2026, 11, 15);
   DateTime at(int seconds) => origin.add(Duration(seconds: seconds));
-  for (final item in fixture['cases'] as List) {
-    final sample = item as Map<String, dynamic>;
+  test('shared fixture covers both sides of every exercise minimum', () {
+    expect(
+      cases.map((sample) => sample['name']),
+      containsAll([
+        'walk_below_minimum',
+        'walk_at_minimum',
+        'run_below_minimum',
+        'run_at_minimum',
+        'bike_below_minimum',
+        'bike_at_minimum',
+      ]),
+    );
+  });
+  for (final sample in cases) {
     test('shared motion history golden: ${sample['name']}', () {
       final result = const WorkoutBackfill().replay(
         activities: [

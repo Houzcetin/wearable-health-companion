@@ -3,7 +3,10 @@
   "cases": [
     {"name":"completed_walk","to":3600,"activities":[[0,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
     {"name":"walk_below_minimum","to":3600,"activities":[[0,"walking",2],[599,"stationary",2]],"bouts":[],"checkedThrough":3600},
+    {"name":"walk_at_minimum","to":3600,"activities":[[0,"walking",2],[600,"stationary",2]],"bouts":[["walk",0,600]],"checkedThrough":3600},
+    {"name":"run_below_minimum","to":3600,"activities":[[0,"running",2],[179,"stationary",2]],"bouts":[],"checkedThrough":3600},
     {"name":"run_at_minimum","to":3600,"activities":[[0,"running",2],[180,"stationary",2]],"bouts":[["run",0,180]],"checkedThrough":3600},
+    {"name":"bike_below_minimum","to":3600,"activities":[[0,"cycling",2],[299,"stationary",2]],"bouts":[],"checkedThrough":3600},
     {"name":"bike_at_minimum","to":3600,"activities":[[0,"cycling",2],[300,"stationary",2]],"bouts":[["bike",0,300]],"checkedThrough":3600},
     {"name":"still_gap_60","to":3600,"activities":[[0,"walking",2],[720,"stationary",2],[780,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,2100]],"checkedThrough":3600},
     {"name":"still_gap_61","to":3600,"activities":[[0,"walking",2],[720,"stationary",2],[781,"walking",2],[2100,"stationary",2]],"bouts":[["walk",0,720],["walk",781,2100]],"checkedThrough":3600},

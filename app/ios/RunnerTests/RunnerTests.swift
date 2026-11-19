@@ -34,7 +34,7 @@ class RunnerTests: XCTestCase {
     }
   }
 
-  private func history() -> (WorkoutMotionHistory, UserDefaults) {
+  private func makeHistory() -> (WorkoutMotionHistory, UserDefaults) {
     let suite = "workout-history-tests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
@@ -42,7 +42,7 @@ class RunnerTests: XCTestCase {
   }
 
   func testActiveMarkerExpiryAndLegacyMarker() {
-    let (history, defaults) = history()
+    let (history, defaults) = makeHistory()
     let start = Date(timeIntervalSince1970: 100000)
     let through = start.addingTimeInterval(600)
     history.setActiveWorkout(from: start, through: through)
@@ -62,7 +62,7 @@ class RunnerTests: XCTestCase {
   }
 
   func testExpiredMarkerAllowsBackgroundBout() {
-    let (history, _) = history()
+    let (history, _) = makeHistory()
     let start = Date(timeIntervalSince1970: 0)
     history.setActiveWorkout(from: start, through: start.addingTimeInterval(600))
     let rows: [[String: Any]] = [
@@ -78,7 +78,7 @@ class RunnerTests: XCTestCase {
   }
 
   func testOnlyChangedMarkerOrAdvancedCursorInvalidatesReminders() {
-    let (history, defaults) = history()
+    let (history, defaults) = makeHistory()
     let start = Date(timeIntervalSince1970: 100000)
     history.setActiveWorkout(from: nil, through: nil)
     XCTAssertEqual(history.workoutRevision, 0)

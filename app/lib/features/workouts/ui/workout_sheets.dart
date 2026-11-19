@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -7,9 +9,11 @@ import '../domain/workout_session.dart';
 import '../workout_provider.dart';
 
 String workoutDuration(Duration duration) {
-  final seconds = duration.inSeconds.clamp(0, 1 << 32);
+  final seconds = math.max(0, duration.inSeconds);
   return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
 }
+
+const bikeDistanceNote = "Distance isn't measured for bike rides";
 
 String activityVerb(ExerciseType type) => switch (type) {
   ExerciseType.walk => 'walking',
@@ -186,6 +190,7 @@ class WorkoutSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = DateFormat('MMM d, HH:mm');
+    final bike = session.type == ExerciseType.bike;
     final pace = session.pace;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -208,15 +213,24 @@ class WorkoutSummary extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text('Duration: ${workoutDuration(session.duration)}'),
-        Text('Steps: ${session.steps}'),
-        Text(
-          'Distance: ${(session.distanceMeters / 1000).toStringAsFixed(2)} km',
-        ),
+        if (bike)
+          const Text(bikeDistanceNote)
+        else ...[
+          Text('Steps: ${session.steps}'),
+          Text(
+            'Distance: ${(session.distanceMeters / 1000).toStringAsFixed(2)} km',
+          ),
+        ],
         Text('Calories: ${session.calories.toStringAsFixed(0)} kcal'),
-        Text('Pace: ${pace == null ? '—' : '${workoutDuration(pace)} min/km'}'),
+        if (!bike)
+          Text(
+            'Pace: ${pace == null ? '—' : '${workoutDuration(pace)} min/km'}',
+          ),
         const SizedBox(height: 8),
         Text(
-          'Distance and calories are estimates based on steps, stride and weight.',
+          bike
+              ? 'Calories are estimated from duration and weight.'
+              : 'Distance and calories are estimates based on steps, stride and weight.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 16),

@@ -140,13 +140,18 @@ class _WorkoutSettingsSectionState
                         ),
                         OutlinedButton(
                           onPressed: () =>
+                              notifier.simulate(ActivityType.cycling),
+                          child: const Text('Simulate bike'),
+                        ),
+                        OutlinedButton(
+                          onPressed: () =>
                               notifier.simulate(ActivityType.still),
                           child: const Text('Stop moving'),
                         ),
                       ],
                     ),
                     Text(
-                      'Updates every 15 seconds. Use Start when prompted, then Stop moving to see the stop prompt.',
+                      'Updates every 4 seconds. Use Start when prompted, then Stop moving to see the stop prompt.',
                       style: _note(context),
                     ),
                   ],
@@ -174,7 +179,5 @@ class _WorkoutSettingsSectionState
   }
 }
 
-TextStyle? _note(BuildContext context) => Theme.of(context)
-    .textTheme
-    .bodySmall
+TextStyle? _note(BuildContext context) => Theme.of(context).textTheme.bodySmall
     ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
