@@ -2,7 +2,7 @@
 
 Based on the "Five-user comparison protocol" in [PLAN.md](PLAN.md). It tests the product promise, **"See what changed from your usual in 10 seconds,"** by having the same people answer the same questions in our app and in the official Google Health (Fitbit) app.
 
-Stage 2 already measured the baseline on the official app; this run repeats it for both apps side by side so the comparison is fair.
+Stage 2 measures the baseline on the official app; this run repeats it for both apps side by side so the comparison is fair.
 
 ## 1. Goal and what counts as success
 

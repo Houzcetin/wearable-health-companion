@@ -9,7 +9,7 @@ Screenshots are in [screenshots/](screenshots/); they show demo data in light an
 1. Open the app and read the short introduction, then tap **Continue**.
 2. **Sign in** with your Google account. This step shares only your basic identity, such as your name and email.
 3. Read **Your health-data consent**. We read sleep, heart rate and activity from Google Health to show your summary, trends and coach answers. Only daily summaries are stored, never raw readings.
-4. Tap **I agree** to continue, or **Not now** to use the app without connecting. You can change your mind later in Settings.
+4. Tap **I agree** to continue, or **Not now** to use the app without connecting. You can connect later from Settings, and remove your health data any time with **Delete health data**.
 
 ## 2. Connect Google Health
 
@@ -70,10 +70,10 @@ The app can notice a walk, run or bike ride and ask whether to log it. Settings 
 - Detection needs about 10 minutes of walking, 3 of running or 5 of cycling before it asks.
 - **While the app is open**, a prompt appears as a sheet with a countdown ("Start walk?"). You can start another type instead, or decline. The **Auto-detect workouts** card on Today shows what is being watched, the live clock of a running workout, and **Today's workouts** once they are saved.
 - **While the app is in the background**, tap **Enable workout notifications** in Settings (the app never asks implicitly). Prompts then arrive as notifications with actions: **Start** / **Not now** for a start, **Stop** / **Keep going** for a stop. Tapping the notification opens the same sheet.
-- **"Did you walk 09:10–09:45?"** On iPhone, the app also checks recent motion history when you return and offers finished workouts it missed as suggestions with **Save** or **Discard**. Nothing is saved without your choice. iOS decides if and when a background reminder ("Looks like you walked 35 min – tap to log it") is delivered, and it is delivered less reliably if Background App Refresh is off or the app was force-quit.
+- **"Did you walk 09:10–09:45?"** On iPhone, the app also checks recent motion history when you return and offers finished workouts it missed as suggestions with **Save** or **Discard**. Nothing is saved without your choice. iOS decides if and when a background reminder ("Looks like you walked 35 min — tap to log it") is delivered, and it is delivered less reliably if Background App Refresh is off or the app was force-quit.
 - Android shows live notifications only; it has no history suggestions yet.
-- Settings keeps your **weight** for calorie estimates. A finished workout is listed as, for example, "07:30 · 30 min · 4,200 steps"; a running one shows a stopwatch.
-- **Workout simulator** (for demos): at 20× speed it produces a ten-minute walk prompt in about 30 seconds. Switch it on, tap **Simulate walk**, then **Stop moving** to see the stop prompt.
+- Settings keeps your **weight** for calorie estimates. A finished workout is listed as, for example, "07:30 · 30 min · 4,200 steps"; a running one shows a stopwatch. Bike rides do not count steps or distance ("Distance isn't measured for bike rides"); their calories are estimated from duration and weight.
+- **Workout simulator** (for demos): runs at 20× speed and updates every 4 seconds. Switch it on, tap **Simulate walk**, **Simulate run** or **Simulate bike**, accept the start prompt (a walk prompt appears after about 32 seconds), then tap **Stop moving** to see the stop prompt. **Finish workout** ends the workout at your last movement.
 
 ![Today with a suggestion](screenshots/today_candidate_light.png) ![Workout settings](screenshots/settings_light_workout.png)
 

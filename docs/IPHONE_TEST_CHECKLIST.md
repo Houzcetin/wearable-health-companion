@@ -49,16 +49,17 @@ Tester: ____________ Date: ____________ iPhone / iOS: ____________ Build (commit
 
 ## 4. Live prompts
 
-Use the **Workout simulator** (Settings → Workout detection) for 4.1–4.5, then repeat with a real walk.
+Use the **Workout simulator** (Settings → Workout detection) for 4.1–4.5 and 4.7, then repeat with a real walk. The simulator runs at 20× speed and updates every 4 seconds (real sensors every 15 seconds).
 
 | # | Step | Expected | Done |
 |---|---|---|---|
-| 4.1 | Switch the simulator on, tap **Simulate walk**, stay in the app. | After about 30 s a **Start walk?** sheet appears with a countdown ("Prompt closes in …"). | ☐ |
-| 4.2 | Tap **Start**. | Today's card shows "Walk · mm:ss" counting up, with steps and distance. | ☐ |
-| 4.3 | Tap **Stop moving**, wait for the stop prompt. | A **Stop?** sheet appears; **Keep going** continues, **Stop** ends. | ☐ |
-| 4.4 | After **Stop**, check the summary and Today. | A summary (type, Auto-detected, steps, distance, calories, pace) and the workout in **Today's workouts** as "HH:MM · NN min · N,NNN steps". Tap **Done** and reopen it from the list. | ☐ |
+| 4.1 | Switch the simulator on, tap **Simulate walk**, stay in the app. | After about 32 s a **Start walk?** sheet appears (lowercase "walk") with a countdown ("Prompt closes in …") and the note "Countdown uses simulator time (20×)." | ☐ |
+| 4.2 | Tap **Start Walk** (the button label is capitalised: **Start Walk**, or **Start Run** for a run). | Today's card shows "Walk · mm:ss" counting up, with steps and distance ("1,000 steps · 0.75 km"). | ☐ |
+| 4.3 | Tap **Stop moving**, wait for the stop prompt. | A **Stop workout?** sheet appears with "Ends at your last movement in …". **Keep going** continues; **Finish workout** ends. Both **Finish workout** and letting the prompt time out end the workout at the **last movement**, not after the idle wait. A manual **Stop** on the Today card while still moving ends it at the current time. | ☐ |
+| 4.4 | After finishing, check the summary and Today. | A summary (type, Auto-detected, duration, steps, distance, calories, pace) and the workout in **Today's workouts** as "HH:MM · NN min · N,NNN steps". Tap **Done** and reopen it from the list. | ☐ |
 | 4.5 | Toggle **Auto-start prompts** and **Auto-stop prompts** off, repeat 4.1. | No prompt for the disabled kind; the card says "Auto-start prompts off". | ☐ |
 | 4.6 | Real walk with the app open: 10 minutes. | "Looks like you're walking (n min)" appears, then the start sheet. | ☐ |
+| 4.7 | Simulator: repeat with **Simulate run** and **Simulate bike**. | Run behaves like walk (button **Start Run**). A bike ride shows no steps, distance or pace: the card and the summary say "Distance isn't measured for bike rides", the summary adds "Calories are estimated from duration and weight.", and Today's workouts lists it as "HH:MM · NN min". | ☐ |
 
 ## 5. Notifications while the app is in the background
 
@@ -66,11 +67,11 @@ Notifications must be allowed (3.1). Use the simulator or a real walk, then pres
 
 | # | Step | Expected | Done |
 |---|---|---|---|
-| 5.1 | Start prompt arrives as a notification. | Title names the activity; actions **Start** and **Not now** are visible (long-press or pull down). | ☐ |
+| 5.1 | Start prompt arrives as a notification. | Title "Start Walk?" (capitalised activity); actions **Start** and **Not now** are visible (long-press or pull down). | ☐ |
 | 5.2 | Tap **Start**. | The app opens in front and the workout starts. | ☐ |
 | 5.3 | Repeat; tap **Not now**. | The app opens (the action runs in the main app) and no workout starts. | ☐ |
 | 5.4 | Repeat; tap the notification body. | Today opens and the existing sheet is shown. | ☐ |
-| 5.5 | Stop prompt arrives as a notification. | Actions **Stop** and **Keep going** are visible; each does what it says. | ☐ |
+| 5.5 | Stop prompt arrives as a notification. | Title "Stop workout?"; actions **Stop** and **Keep going** are visible; each does what it says. | ☐ |
 | 5.6 | Lock the phone and repeat 5.1–5.5 from the lock screen. | The same actions are offered; they open the app after unlock. | ☐ |
 | 5.7 | Start moving again while a prompt notification is showing. | The notification is cancelled when the prompt resolves. (iOS may leave an expired banner until you reopen the app; it is cleared on resume.) | ☐ |
 | 5.8 | Wait for the prompt timeout, then tap an old action. | The stale action does nothing; it cannot start a workout. | ☐ |
@@ -84,7 +85,7 @@ Carry the phone. For each activity: finish it, wait over a minute, then check. R
 |---|---|---|---|---|---|
 | 6.1 | Walk, at least 10 min | **"Did you walk HH:MM–HH:MM? N steps"** with correct start, end and type. | ☐ | ☐ | ☐ |
 | 6.2 | Run, at least 3 min | Run suggestion. | ☐ | ☐ | ☐ |
-| 6.3 | Bike ride, at least 5 min | Bike ("cycle") suggestion. | ☐ | ☐ | ☐ |
+| 6.3 | Bike ride, at least 5 min | "Did you cycle HH:MM–HH:MM?" with no step count, plus the note "Distance isn't measured for bike rides". | ☐ | ☐ | ☐ |
 
 | # | Step | Expected | Done |
 |---|---|---|---|
@@ -94,7 +95,7 @@ Carry the phone. For each activity: finish it, wait over a minute, then check. R
 | 6.7 | Reopen again after saving. | No duplicate suggestion for the saved workout. | ☐ |
 | 6.8 | Save a workout while signed in with health consent. | The row appears in Supabase `workouts` with source `auto`. | ☐ |
 | 6.9 | Switch to another Google account. | Pending suggestions are not shown to the other account. | ☐ |
-| 6.10 | A walk with a short pause (about 90 s of sitting) in the middle. | Counted as **one** walk; a 121-second gap or a change of exercise type splits it. | ☐ |
+| 6.10 | A walk with a pause in the middle. | A pause of up to 60 s of sitting stays one walk; 61 s or more, or a change of exercise type, splits it. One unclear (uncertain) reading of up to 2 minutes inside a walk is bridged once; a second such reading, or one longer than 2 minutes, splits it. | ☐ |
 | 6.11 | Do a walk that overlaps a workout you already saved. | The overlapping bout is not offered again. | ☐ |
 | 6.12 | Motion history older than 24 hours. | Not offered; only the last 24 hours are checked. | ☐ |
 | 6.13 | Block pedometer access or use a bout with no step data. | The card says "Steps unavailable" and shows no zero steps, distance or calories; **Save** and **Discard** still work. | ☐ |
@@ -137,7 +138,7 @@ iOS decides when background refresh runs (the earliest request is an hour away),
 | 8.1 | Go offline (airplane mode), finish and save a workout while signed in with health consent. | It is kept in the pending queue (`workouts.pending.v1.<user id>`) and shown in Today's workouts. | ☐ |
 | 8.2 | Go online. | It syncs and appears in Supabase once, with no duplicate. | ☐ |
 | 8.3 | Save a workout offline, then **Sign out** (Settings). Sign back in with the same account, online. | Signing out clears that user's pending queue and its corrupt-data backup. The unsynced workout is **gone** and is not uploaded after sign-in. | ☐ |
-| 8.4 | Save a workout offline, then withdraw health consent (or **Delete health data**) and confirm. | On success the user's pending queue is cleared, **even if consent was already off**, and the workout does not reappear later. | ☐ |
+| 8.4 | Save a workout offline, then tap **Delete health data** and confirm. | On success the user's pending queue is cleared, **even if consent was already off**, and the workout does not reappear later. | ☐ |
 | 8.5 | Save a workout offline, then **Delete account** and confirm. | On success the pending queue is cleared before the sign-out; the account and data are removed and you return to the intro. | ☐ |
 | 8.6 | Repeat 8.4 and 8.5 with the network off or the server failing, so the delete **fails**. | The error "Could not delete your health data" (or "…finish deleting your account") is shown and the pending queue is **kept**; nothing is lost. Retry succeeds. | ☐ |
 | 8.7 | Start the app with health consent already off and a pending workout from an earlier grant. | The queue is not cleared (rows stay paused) and syncs after consent is granted again. Only an actual withdrawal while the app runs clears it. | ☐ |
