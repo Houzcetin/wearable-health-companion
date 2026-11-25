@@ -14,16 +14,24 @@ Tester: ____________ Date: ____________ iPhone / iOS: ____________ Build (commit
 
 ## 1. Build and install
 
+**Before the first build** (verified 2026-11-19 on an iPhone 17 Pro, iOS 26.5):
+
+- Install CocoaPods (`flutter_activity_recognition` has no Swift Package Manager support). Run `flutter pub get` first; Flutter generates the Pod configuration that `ios/Podfile` reads.
+- Set `DEVELOPMENT_TEAM = <your team id>` in the git-ignored `app/ios/Flutter/Google.xcconfig`. Never commit a team ID.
+- Install with `cd app && flutter run --release -d <device>`. Debug builds start only while attached to Flutter.
+- A free Apple ID (Personal Team) signs apps that **expire after 7 days**; reinstall them after that.
+- The iOS deployment target is 15.0.
+
 | # | Step | Expected | Done |
 |---|---|---|---|
-| 1.1 | `cd app && flutter pub get`, then open `ios/Runner.xcworkspace` in Xcode. | The project opens with no missing-package errors. | ☐ |
-| 1.2 | Runner target → **Signing & Capabilities**: choose your Team and let Xcode manage signing. | No red signing errors; a provisioning profile is created. | ☐ |
+| 1.1 | `cd app && flutter pub get`, then open `ios/Runner.xcworkspace` in Xcode. | The project opens with no missing-package errors. **Verified 2026-11-19.** | ☒ |
+| 1.2 | Runner target → **Signing & Capabilities**: choose your Team and let Xcode manage signing. | No red signing errors; a provisioning profile is created. **Verified 2026-11-19.** | ☒ |
 | 1.3 | Same tab → **Background Modes**: **Background fetch** is ticked. | `fetch` is listed (it is also `UIBackgroundModes` in Info.plist). | ☐ |
 | 1.4 | Info.plist: `BGTaskSchedulerPermittedIdentifiers` contains `com.wearablecompanion.workouts.refresh`; `NSMotionUsageDescription` is present. | The identifier matches the one in `WorkoutMotionHistory.swift`; the motion text reads "Recognize walks, runs and bike rides and count steps for your workouts." | ☐ |
 | 1.4a | `ios/Flutter/Google.xcconfig` exists (copied from `Google.xcconfig.example`; it is git-ignored) and both `GOOGLE_IOS_CLIENT_ID` and `GOOGLE_REVERSED_CLIENT_ID` are filled from the **same** iOS OAuth client. `.env.json` has the same `GOOGLE_IOS_CLIENT_ID`. See [SETUP.md](SETUP.md). | No `YOUR_IOS_CLIENT_ID` placeholder is left. The reversed ID is `com.googleusercontent.apps.<the client ID without .apps.googleusercontent.com>`. | ☐ |
-| 1.5 | Select your iPhone and press **Run** (⌘R). | The app builds, installs and launches. `WorkoutMotionHistory.swift` is compiled and the method channel registers (no "missing plugin" log). | ☐ |
+| 1.5 | Select your iPhone and press **Run** (⌘R), or `flutter run --release -d <device>`. | The app builds, installs and launches. `WorkoutMotionHistory.swift` is compiled and the method channel registers (no "missing plugin" log). | ☒ (build and launch only; the method-channel log check was not recorded) |
 | 1.5a | After the build, inspect the built Info.plist: `plutil -p <path to Runner.app>/Info.plist` (for example `app/build/ios/iphoneos/Runner.app/Info.plist` after `flutter build ios`, or the Runner.app under Xcode's DerivedData). | `GIDClientID` shows your iOS client ID and `CFBundleURLSchemes` contains the reversed client ID, both with real values, not `$(GOOGLE_IOS_CLIENT_ID)` or `$(GOOGLE_REVERSED_CLIENT_ID)`. | ☐ |
-| 1.6 | Trust the developer profile on the phone if asked (Settings → General → VPN & Device Management). | The app opens. | ☐ |
+| 1.6 | Trust the developer profile on the phone if asked (Settings → General → VPN & Device Management). | The app opens. **Verified 2026-11-19** (the app launched). | ☒ |
 | 1.7 | Press **⌘U** with the `RunnerTests` scheme. | All RunnerTests pass, including `testMotionHistoryGolden`, the active-marker expiry tests and the revision tests. The JSON resource loads from the test bundle. | ☐ |
 
 ## 2. First flow
@@ -31,7 +39,7 @@ Tester: ____________ Date: ____________ iPhone / iOS: ____________ Build (commit
 | # | Step | Expected | Done |
 |---|---|---|---|
 | 2.1 | Fresh install, launch. | Intro screen, **Continue**. **No notification or motion permission prompt** appears at launch. | ☐ |
-| 2.2 | **Continue** → **Sign in** with Google. | The Google sheet opens and returns to the app (nonce check: sign-in succeeds). | ☐ |
+| 2.2 | **Continue** → **Sign in** with Google. | The Google sheet opens and returns to the app. Sign-in succeeds with `skip_nonce_check = true` in `supabase/config.toml`: the Google iOS SDK sets its own nonce, which the app cannot pass to Supabase (see [SETUP.md](SETUP.md), "Nonce check"). **Verified 2026-11-19.** | ☒ |
 | 2.3 | Read "Your health-data consent". Tap **Not now** once, then repeat the flow and tap **I agree**. | **Not now** leaves you in the app without data. **I agree** continues to connect. | ☐ |
 | 2.4 | **Connect Google Health**, approve in the browser window. | Returns to the app; connection shows as **Connected** in Settings. | ☐ |
 | 2.5 | Today → **Sync now**. | Spinner, then sleep, heart rate and steps cards with a lead sentence. "Last synced" shows the time. | ☐ |

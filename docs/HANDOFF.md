@@ -6,31 +6,33 @@ Other documents: [PLAN.md](PLAN.md) (scope and course stages), [ARCHITECTURE.md]
 
 ## 1. Where things stand
 
-Base: `origin/main` at `253ca6e` (merge of PR #23, after PRs #19, #20 and #21). Facts were checked against the repository at that commit and the open branches. Test counts are from local runs and may drift; CI is the source of truth.
+Base: `origin/main` at `9d088bb` (merge of PR #25, after PRs #19–#24 and the iOS device work in PR #28). Facts were checked against the repository at that commit and the open branches. Test counts are from local runs and may drift; CI is the source of truth.
 
 ### On `main` and working
 
 | Area | State |
 |---|---|
-| Sign-in, separate health consent | Done in code. iOS sign-in is not yet verified on a device (SETUP.md). |
+| Sign-in, separate health consent | Done. Google sign-in verified on an iPhone 17 Pro (iOS 26.5) on 2026-11-19 (SETUP.md). Android verified earlier with the nonce check on. |
 | Google Health connection and sync (Sync now, 15-minute cron, webhooks, backfill) | Done in code. Real-account behaviour is unverified: 13 `UNVERIFIED` markers remain. |
 | Today: lead sentence, three cards, usual ranges | Done. |
 | Trends: week and month, days outside the usual range | Done. |
 | Coach: tools, consent, limits, Numbers used | Done. Cost limits merged with PR #23: default model Sonnet, `max_tokens` 1500, at most 3 model calls, atomic reservation with per-user and global 24-hour limits, and limit errors show a clear message without Retry. The 70 of 78 evaluation result (COACH_EVAL.md) was measured with the earlier model and prompt; re-run it (section 4f). |
 | Export and delete (health data, account) | Done. Export scope is partial (backlog c). |
-| Workout detection: live prompts, notifications, iPhone history suggestions | Done in code. iPhone path not verified on a device. Android has live detection only. |
+| Workout detection: live prompts, notifications, iPhone history suggestions | Done in code. The iPhone build runs; background notifications, BGTask, motion history and RunnerTests (⌘U) are not yet verified on a device. Android has live detection only. |
 | Database security hardening (PR #19) | Merged. Migration `20261119000000_security_hardening.sql`: profile timezones are normalised (section 6), sync claims are rate limited per user, privileges revoked, CHECK constraints added. |
-| Demo mode (PR #20) and demo polish (PR #21) | Merged. |
+| Demo mode (PR #20) and demo polish (PR #21) | Merged. Web demo on GitHub Pages (PR #27): https://houzcetin.github.io/wearable-health-companion/, deployed by `.github/workflows/pages.yml` on every push to `main`. |
+| iPhone device build and Google sign-in (PR #28) | Merged. CocoaPods plus Swift Package Manager, iOS 15 minimum, `Podfile` and `Podfile.lock`. Supabase `skip_nonce_check = true` (see section 6). |
+| Coach message copy (PR #25) | Merged. Limit errors use rolling 24-hour wording and show no Retry button. |
+| Tab re-tap fix (PR #24) | Merged. Re-tapping the selected tab keeps its stack; Today scrolls to the top. The root cause of the reported "Walk summary" re-opening was **not reproduced**; the regression tests also pass without the change. Reproduce it on a device or in a browser before you rely on it. |
 | CI: Flutter analyze and tests, Chrome workout tests, Deno tests (PR #17) | Merged. Actions are pinned to version tags, not SHAs. |
 | Docs: user guide, technical report, architecture, cost skeleton, checklists | Done. |
 
 ### Open PRs and branches
 
-| Item | Branch | State | Notes |
-|---|---|---|---|
-| Tab re-tap fix | `claude/tab-retap-fix` | **No PR yet, not merged.** | Re-tapping the selected tab no longer resets its stack; Today scrolls to the top instead. Summaries are cleared when their sheet closes. The root cause of the reported "Walk summary" re-opening was **not reproduced**; the regression tests pass without the change too. Reproduce it before you rely on this fix. |
+No PR is open at this commit. Branches of merged PRs may still exist on the remote; check `git log origin/main` before deleting any of them.
 
-Other remote branches (`claude/auto-detect-workouts`, `claude/workouts-background`, `claude/workout-sync-*`, `claude/delete-cleanup-polish`, `claude/fix-sim-summary`, `claude/ios-google-signin-config`, `claude/peaceful-hawking-y65kgu`, `claude/readme-status`, `claude/ci-workflow`, `claude/demo-mode`, `claude/demo-polish`, `claude/security-hardening-db`) have been merged into `main` as earlier PRs. Check with `git log origin/main --oneline` before deleting any of them.
+
+
 
 ### Planned but not started
 
@@ -51,7 +53,7 @@ For a release web build use `flutter build web --dart-define=DEMO_MODE=true --re
 ### With a real backend
 
 1. Create the local files, which are git-ignored: `.env` (server secrets, see `.env.example`) and `.env.json` (public app settings).
-2. Create `app/ios/Flutter/Google.xcconfig` from `Google.xcconfig.example` if you build for iOS.
+2. For iOS, install CocoaPods, create `app/ios/Flutter/Google.xcconfig` from `Google.xcconfig.example` (add your `DEVELOPMENT_TEAM` there), and run `flutter run --release -d <device>`. See IPHONE_TEST_CHECKLIST.md, section 1.
 3. Apply the migrations to your Supabase project (section 4g) and set the function secrets (SETUP.md, "Function secrets").
 4. Run:
 
@@ -71,7 +73,7 @@ Without `.env.json` the app runs as an offline shell. Consoles, project IDs and 
 | Static analysis | `cd app && flutter analyze --no-fatal-infos` | No errors or warnings expected; infos about SDK deprecations remain. |
 | Edge Functions (Deno) | `deno test --config supabase/functions/deno.json supabase/functions`, and the `_shared` command in `supabase/functions/README.md` | About 94 `Deno.test` calls on `main` (a grep count; parameterised cases add more). Deno was not available in the authoring workspace; CI runs it. Type checks: see the same README. |
 | Coach evaluation | see COACH_EVAL.md, "How to run it again" | Makes real Claude API calls and needs `ANTHROPIC_API_KEY`. Run it on your own machine. |
-| iPhone | [IPHONE_TEST_CHECKLIST.md](IPHONE_TEST_CHECKLIST.md) | Needs a Mac and Xcode. Run `RunnerTests` with ⌘U. |
+| iPhone | [IPHONE_TEST_CHECKLIST.md](IPHONE_TEST_CHECKLIST.md) | Needs a Mac, Xcode and CocoaPods. Build, sign-in and install are verified; `RunnerTests` (⌘U) and the background items are not. |
 
 CI (`.github/workflows/ci.yml`) runs the Flutter analysis and tests, the Chrome workout tests and the Deno tests on every pull request and push to `main`. It uses no secrets.
 
@@ -114,7 +116,7 @@ Priority order. Each item lists what, why, where, and when it is done.
 
 **(d) Simulator polish.** *What:* manual session end is not clean; extend the prompt durations in the simulator 20×; add the web steps to `app/lib/features/workouts/README.md`; extend the shift-prohibition test (`app/test/web_int_safety_test.dart`) to cover the `0x` pattern; add a Run Script for an empty Google ID in iOS Release. *Why:* rough edges found in QA. *Done when:* the simulator flow is covered by the Chrome tests and the README steps have been tried.
 
-**(e) iPhone verification.** *What:* run [IPHONE_TEST_CHECKLIST.md](IPHONE_TEST_CHECKLIST.md) on a device; fill in `app/ios/Flutter/Google.xcconfig` from the example (both IDs from the same iOS client). *Why:* the Swift code, background refresh, notifications and iOS sign-in have never run on a device. *Done when:* every box is ticked or the failures are listed as issues.
+**(e) iPhone verification (narrowed).** *What:* the build and Google sign-in are verified on an iPhone 17 Pro (iOS 26.5). Still to check on a device: background notifications and their actions, the BGTask refresh (debugger simulation), motion-history suggestions, `RunnerTests` (⌘U), and the rest of [IPHONE_TEST_CHECKLIST.md](IPHONE_TEST_CHECKLIST.md). *Why:* the Swift code and background behaviour have never run on a device. *Done when:* each remaining item is ticked or listed as an issue.
 
 **(f) Coach eval with Sonnet.** *What:* after (a), re-run the evaluation on your own machine and record the result. *Why:* the 90% result is for the current model only. *Where:* COACH_EVAL.md ("How to run it again"), `docs/eval/`. *Done when:* the results table has a new row and the failures are classified.
 
@@ -147,11 +149,14 @@ Priority order. Each item lists what, why, where, and when it is done.
 
 ## 6. Gotchas
 
-- **`flutter pub get`, `flutter test` and `flutter build` rewrite files.** `app/analysis_options.yaml` gets an "exclude build" block, and `pubspec.lock` can change when the tool version differs. `.metadata` can change too. Revert these before you commit (`git checkout app/analysis_options.yaml app/pubspec.lock`). Do not commit them.
+- **`flutter pub get`, `flutter test` and `flutter build` can rewrite `app/pubspec.lock` and `app/.metadata`** when the local tool version differs. Revert those two files before you commit unless the change is intended (`git checkout app/pubspec.lock app/.metadata`). `app/analysis_options.yaml` now carries its exclude block in the repository, so it no longer needs reverting.
 - **`web/` is part of the repository now.** It came from `flutter create . --platforms web`. If it is missing, recreate it with that command and check that `index.html` and `manifest.json` still carry the app's title.
 - **Dart on the web uses JavaScript numbers.** Bitwise operations on 32-bit values truncate silently; shifts of 32 bits or more give zero. Use arithmetic (`* 4294967296`), not shifts. `app/test/web_int_safety_test.dart` scans `lib/` for this. The notification timeout uses `1 << 31`, which is allowed.
 - **Deno may be missing locally.** The Edge Function tests were not run in the authoring workspace because Deno is not installed there. If you have no Deno, rely on the CI job and do not assume the Edge Function tests pass.
-- **`Google.xcconfig` is git-ignored.** Release and Profile include it with `#include?`, so a missing file does not break the build but iOS Google sign-in fails until the values are set.
+- **`Google.xcconfig` is git-ignored.** Release and Profile include it with `#include?`, so a missing file does not break the build but iOS Google sign-in fails until the values are set. `DEVELOPMENT_TEAM` for a free Apple ID goes only in this git-ignored file; never commit a team ID.
+- **Free Apple ID builds expire after 7 days.** An app signed with a Personal Team stops launching after 7 days and must be reinstalled. Install with `flutter run --release -d <device>`: debug builds start only while attached to Flutter.
+- **Google nonce check is off on purpose.** `skip_nonce_check = true` in `supabase/config.toml`. The Google iOS SDK sets its own nonce, which the app cannot pass to Supabase, so sign-in failed with the check on. Supabase still verifies the token signature, the audience (our client IDs) and expiry. What is lost is the nonce binding against token replay. See SETUP.md, "Nonce check".
+- **CocoaPods is still needed.** `flutter_activity_recognition` has no Swift Package Manager support, so install CocoaPods before the first iOS build.
 - **Timezones are normalised, not rejected.** The trigger in `20261119000000_security_hardening.sql` maps old zone names to current ones (for example `Europe/Kiev` to `Europe/Kyiv`, `Asia/Calcutta` to `Asia/Kolkata`, `Asia/Saigon` to `Asia/Ho_Chi_Minh`, `US/*` to their current names). Unknown, null, over 64 characters or malformed values become `UTC`. Re-check the alias map against the live project's tzdata before you rely on it: Supabase's PostgreSQL build may differ from the local one.
 - **Migrations with `NOT VALID`.** `20261116010000_workout_bounds.sql` adds CHECK constraints with `NOT VALID` (new rows are checked, old ones are not) and then `VALIDATE`s them. `VALIDATE` scans the table and fails if an existing row breaks the rule, so look at the data first on a large table.
 - **Action tags in CI are version tags.** `ci.yml` pins actions by tag. For full pinning, replace each tag with its commit SHA (the comment at the top of the file says how).
