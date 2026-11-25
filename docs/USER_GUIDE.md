@@ -4,6 +4,8 @@ Wearable Health Companion shows what changed in your sleep, heart rate and activ
 
 Screenshots are in [screenshots/](screenshots/); they show demo data in light and dark mode.
 
+**Web demo.** The sample-data version of the app runs in a browser at https://houzcetin.github.io/wearable-health-companion/ and needs no sign-in or device.
+
 **Demo mode.** If the app is built with `--dart-define=DEMO_MODE=true`, it opens full of sample data without any sign-in or device (see the README). Every screen then shows a "Demo data" label; the coach answers only with prepared replies, and export and delete are disabled.
 
 ## 1. Sign in and health consent

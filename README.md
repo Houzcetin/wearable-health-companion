@@ -11,10 +11,13 @@ Semester project 15, Gen-AI / Mechatronics Lab, Fall 2026.
 ## Status
 The code for course stages 1 to 6 is in place: Google sign-in with a separate health-data consent, Google Health connection, sync (manual, scheduled and webhook), a one-screen Today summary with usual ranges, week and month Trends, the AI coach with its evaluation, and export and delete. An extra is automatic workout detection (walks, runs and bike rides) with start and stop prompts, notifications and iPhone history suggestions. The Stage 9 documents are written: the [user guide](docs/USER_GUIDE.md), [technical report](docs/TECHNICAL_REPORT.md), [architecture](docs/ARCHITECTURE.md) and a [cost report](docs/COST_REPORT.md) skeleton.
 
+The app builds and signs in on an iPhone 17 Pro (iOS 26.5), verified on 2026-11-19. A [web demo](https://houzcetin.github.io/wearable-health-companion/) with sample data is deployed to GitHub Pages from `main`, so the app can be shown without a backend or a device.
+
 Still open:
-- Testing on a real iPhone ([checklist](docs/IPHONE_TEST_CHECKLIST.md)) and with a real Fitbit Air account.
+- On an iPhone: background notifications, the background refresh task, motion-history suggestions and the `RunnerTests` suite ([checklist](docs/IPHONE_TEST_CHECKLIST.md)).
+- Testing with a real Fitbit Air account; Google Health data shapes are still unverified.
 - The Stage 7 five-user beta ([protocol](docs/USER_TEST_PROTOCOL.md)).
-- Security fixes from the QA review are in progress (see the technical report, "Known risks and planned fixes").
+- Open security items from the QA review: secure storage on the device, export scope and the default display name (see the technical report, "Known risks and planned fixes").
 - Real figures in the cost report.
 
 The Play tab (game layer) is a placeholder and is not part of the required MVP.

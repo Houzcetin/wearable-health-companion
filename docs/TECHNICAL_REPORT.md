@@ -100,22 +100,24 @@ Full details and the iPhone verification list: [`app/lib/features/workouts/READM
 
 **QA security review (summary).** The database layer was tested on a real PostgreSQL with separate users: RLS is enabled on all 18 tables, and users cannot read, change or delete other users' data; every SECURITY DEFINER function has a fixed search_path and EXECUTE granted only to the roles that need it; health data and OAuth tokens are not reachable from the client (Vault, service role only). Edge Functions authenticate themselves (user JWT, cron secret or signed webhook) and do not leak details in error responses; no secrets were found in the git history. Error responses carry only short codes (one exception: missing-configuration codes name the variable).
 
+**Google sign-in on iOS.** Supabase's Google nonce check is turned off (`skip_nonce_check = true`) because the Google iOS SDK sets its own nonce, which the app cannot pass to Supabase, and sign-in failed with the check on. Supabase still verifies the token signature, the audience (our client IDs) and expiry. What is lost is the binding of the token to this app's session, which would stop a replayed token. This is a documented trade-off, not an oversight; see SETUP.md, "Nonce check".
+
 **Privacy design.** Only daily aggregates and finished workouts are stored. The in-app disclosure explains what is read and stored before consent; consent is logged in `consent_events` and the coach has its own consent. Users can export their data and delete health data or the whole account. Secrets live in function secrets, Vault and git-ignored files; `.env.example` lists names only. The coach sees only the caller's rows through tools that filter by the authenticated user, and its prompt forbids medical claims. This is not a medical product.
 
 ### Known risks and planned fixes
 
-The QA review found the following. **Fixes are in progress; each item will be updated when its pull request merges.**
+The QA review found the following. Items marked Done were fixed in the pull request named in their row; the rest are still open.
 
 | Risk | Detail | Status |
 |---|---|---|
-| Sync worker access | A user-triggered `sync-worker` call drains the shared queue, so it can process other users' queued jobs (it returns only counts). Planned: user calls limited to the caller's own jobs plus a per-user rate limit; the global queue only for cron and service credentials. | In progress |
-| Timezone validation | `profiles.timezone` drives civil-date logic and the scheduled queueing. Invalid or unexpected values should be rejected at write time and fall back safely. | In progress |
-| Coach cost limits | The limit is per user per rolling 24 hours and the check is not atomic, so parallel requests can exceed it. There is no global daily ceiling, and the default model and `max_tokens` of 16000 make it the most expensive configuration, so total spend scales with the number of users. | In progress |
-| Mobile secure storage and backups | The pending workout queue is kept in SharedPreferences and session tokens are stored as plain text. Android `allowBackup` and iOS device backups can copy them. Planned: platform secure storage and backup exclusion. | In progress |
-| Health consent not enforced on the server | Health consent is enforced by the app and by the `workouts` insert policy, but the server functions do not all re-check it. | In progress |
-| `join_challenge` and sharing consent | `join_challenge` does not check the user's sharing consent. The game layer is not used by the app yet, but the function is callable. | In progress |
-| Default `display_name` | The signup trigger defaults `display_name` to the e-mail prefix, which can expose an address fragment on a future friends board. | In progress |
-| Table privileges | The `anon` and `authenticated` roles hold `TRUNCATE` on public tables. RLS does not apply to `TRUNCATE`, so the grant should be revoked. | In progress |
+| Sync worker access | A user-triggered `sync-worker` call used to drain the shared queue. Now each verified user gets a per-user claim with a rate limit (`try_start_user_sync`, `user_sync_rate_limits`); the global `claim_sync_jobs` is granted to the service role only. Merged in PR #19. | Done |
+| Timezone validation | `profiles.timezone` is normalised on write and repaired on migration: old zone names map to current ones, and unknown or malformed values become `UTC` instead of failing. Merged in PR #19. The alias map should be re-checked against the live project's tzdata. | Done |
+| Coach cost limits | Sonnet by default, `max_tokens` 1500, at most three model calls, an atomic `reserve_coach_question` reservation with per-user and global 24-hour limits (`COACH_GLOBAL_DAILY_LIMIT`). Merged in PR #23. The evaluation has not yet been re-run with the new model. | Done |
+| Health consent on the server | `store_health_connection` checks health consent before it creates a Vault secret, and the `workouts` insert policy requires consent. Other server functions were not audited for consent. | Partly done |
+| `join_challenge` and sharing consent | `join_challenge` now requires sharing consent for both the challenge and the member. Merged in PR #19. | Done |
+| Table privileges | `anon` and `authenticated` no longer hold `TRUNCATE`, `REFERENCES` or `TRIGGER` on public tables, and the default privileges are changed too. Merged in PR #19. | Done |
+| Mobile secure storage and backups | The pending workout queue is kept in SharedPreferences and session tokens are stored as plain text. Android `allowBackup` is not set, and iOS device backups can copy both. Planned: Keychain and Keystore storage and backup exclusion. | In progress |
+| Default `display_name` | The signup trigger still defaults `display_name` to the e-mail prefix, which can expose an address fragment on a future friends board. | In progress |
 | Export scope | Export covers profile, consent events, connection status, daily metrics, coach messages and workouts. `weekly_insights`, `summary_feedback` and derived game data are not included; the export is being extended. | In progress |
 | "Delete health data" and derived game data | Deleting health data does not delete derived game-layer rows (for example points or streaks). Left unchanged on purpose by the team's decision; the export is extended so the user can see that data. | Accepted |
 
@@ -135,7 +137,7 @@ The QA review found the following. **Fixes are in progress; each item will be up
 
 ## 10. Known limitations
 
-- **No iPhone device testing yet.** The Swift code, CoreMotion history, background refresh and notifications have been tested only through unit tests and golden fixtures. The full checklist is [IPHONE_TEST_CHECKLIST.md](IPHONE_TEST_CHECKLIST.md).
+- **iPhone: build and sign-in only.** The app builds and signs in on an iPhone 17 Pro (iOS 26.5), verified on 2026-11-19. The Swift code, CoreMotion history, background refresh and notifications have been tested only through unit tests and golden fixtures, not on a device. The remaining checks are in [IPHONE_TEST_CHECKLIST.md](IPHONE_TEST_CHECKLIST.md).
 - **Android has no background workout detection.** It gets live detection and notifications while the app runs. True background detection needs a native activity-recognition delivery path and a foreground service.
 - **No bike distance or pace.** Bike rides record duration and an estimated calorie figure only.
 - **Real-data accuracy untested.** Fixtures are synthetic; whether Fitbit Air reports every metric, and whether our values match the official app, is a Stage 3 and Stage 7 question.
@@ -146,7 +148,7 @@ The QA review found the following. **Fixes are in progress; each item will be up
 ## 11. Next steps
 
 1. Merge the in-progress security fixes (section 8) and update this report.
-2. Run the iPhone checklist on a real device; fix what it finds.
+2. Run the remaining iPhone checks (background notifications, BGTask, motion history, RunnerTests) on a real device; fix what they find.
 3. Run the five-user comparison (USER_TEST_PROTOCOL.md) and fix the top three problems.
 4. Fill in the cost report with real invoices and set the spend limits it lists.
 5. Decide the coach's default model and re-run the evaluation with it.
