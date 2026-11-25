@@ -106,8 +106,8 @@ void main() {
   });
 
   const errors = {
-    'daily_limit': "You've reached today's coach limit. Try again tomorrow.",
-    'coach_busy': "The coach has reached today's shared limit. Please try again tomorrow.",
+    'daily_limit': "You've reached the coach limit for the last 24 hours. Try again later.",
+    'coach_busy': 'The coach is busy right now (shared limit for the last 24 hours). Please try again later.',
     'busy': 'The coach is busy. Try again in a minute.',
     'unavailable': "The coach couldn't answer right now. Try again.",
     'network': 'Check your connection and try again.',
@@ -118,7 +118,9 @@ void main() {
       await startStage5(tester, screen: const CoachScreen(), coach: coach);
       await send(tester);
       expect(find.text(entry.value), findsOneWidget);
-      expect(find.text('Retry'), entry.key == 'daily_limit' ? findsNothing : findsOneWidget);
+      expect(find.text('Retry'),
+        entry.key == 'daily_limit' || entry.key == 'coach_busy'
+            ? findsNothing : findsOneWidget);
     });
   }
 

@@ -46,7 +46,7 @@ void main() {
       status: 429, details: '{"error":"daily_limit"}')).code, 'daily_limit');
     expect(mapCoachError(const FunctionException(
       status: 503, details: '{"error":"coach_busy"}')).message,
-      "The coach has reached today's shared limit. Please try again tomorrow.");
+      'The coach is busy right now (shared limit for the last 24 hours). Please try again later.');
     expect(mapCoachError(const FunctionException(
       status: 502, details: '<html>upstream failure</html>')).code, 'unavailable');
   });

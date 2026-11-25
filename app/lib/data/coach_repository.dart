@@ -9,9 +9,9 @@ class CoachException extends UserFacingException {
     code == 'consent_required'
         ? 'Allow the coach to use your daily summaries first.'
         : code == 'daily_limit'
-        ? "You've reached today's coach limit. Try again tomorrow."
+        ? "You've reached the coach limit for the last 24 hours. Try again later."
         : code == 'coach_busy'
-        ? "The coach has reached today's shared limit. Please try again tomorrow."
+        ? 'The coach is busy right now (shared limit for the last 24 hours). Please try again later.'
         : code == 'busy'
         ? 'The coach is busy. Try again in a minute.'
         : code == 'network'
