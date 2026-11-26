@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Individual Contributions</title>
+<style>
+  @page { size: A4; margin: 10mm 13mm 9mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; color: #222; font-size: 8.9pt; line-height: 1.26; margin: 0; }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 8.5pt; letter-spacing: 1.5px; text-transform: uppercase; color: #2B3E8A; margin: 0; }
+  h1 { font-size: 19pt; color: #2B3E8A; margin: 2px 0 4px; }
+  .meta { font-size: 9.5pt; color: #555; margin: 0 0 12px; }
+  h2 { font-size: 12pt; color: #2B3E8A; margin: 10px 0 5px; border-bottom: 1.5px solid #2B3E8A; padding-bottom: 3px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid #C9C6C5; padding: 3px 6px; vertical-align: top; text-align: left; }
+  th { background: #E7EAF6; font-size: 9.5pt; }
+  td.area { width: 24%; font-weight: 600; }
+  ul { margin: 0; padding-left: 16px; }
+  li { margin: 1px 0; }
+  .note { font-size: 9pt; color: #555; }
+  .sign { display: flex; gap: 40px; margin-top: 22px; }
+  .sign div { flex: 1; border-top: 1px solid #444; padding-top: 4px; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+<p class="eyebrow">ENGR4451 · Project 15 · Progress update</p>
+<h1>Wearable Health Companion: Individual Contributions</h1>
+<p class="meta">Team: Oğuz Çetin, Aleksandr Gordeev · Repository: github.com/Houzcetin/wearable-health-companion · Period: 11–26 Nov 2026 · State: main 537dc1a, 28 pull requests merged</p>
+
+<h2>Oğuz Çetin</h2>
+<table>
+<tr><th>Area</th><th>Contribution</th></tr>
+<tr><td class="area">Project setup and plan</td><td><ul>
+<li>Set up the repository, the Flutter app scaffold, the README and the 10-stage plan (docs/PLAN.md).</li>
+<li>Wrote the setup guide with Google Cloud and Supabase console steps.</li></ul></td></tr>
+<tr><td class="area">Backend (Supabase)</td><td><ul>
+<li>Database schema with row-level security, and the health-connect migration (Vault token helpers, backfill, demo data).</li>
+<li>Edge Functions: Google Health OAuth, sync worker, coach, webhook, export and delete, scheduled sync.</li>
+<li>Deployed the live project on 25 Nov: 7 migrations, 7 functions, secrets and the coach spend limit.</li></ul></td></tr>
+<tr><td class="area">App features</td><td><ul>
+<li>First flow: sign-in, consent, Google Health connect and the Today summary.</li>
+<li>Stage 5: Trends charts, Coach chat, and export and delete in Settings.</li>
+<li>Stage 6: coach evaluation with fixture users and code-rule checks (70 of 78 answers pass).</li>
+<li>Automatic workout detection: phone activity recognition with start and stop prompts.</li></ul></td></tr>
+<tr><td class="area">AI-assisted development (orchestrator)</td><td><ul>
+<li>Ran the multi-session workflow: one orchestrator session, a Codex runner for coding, a UI/UX session and a separate QA session.</li>
+<li>Wrote and reviewed the task prompts, and merged pull requests only after QA approval and green CI.</li>
+<li>Work delivered this way: background workout notifications, a durable workout sync queue, the web 32-bit shift bug fix, security hardening after the QA review, coach cost limits, CI with 3 jobs, demo mode, light and dark screenshots, and the documentation set (architecture, technical report, cost report, user guide, test checklists, handoff).</li></ul></td></tr>
+<tr><td class="area">Presentation</td><td><ul>
+<li>Built the first version of the progress slides.</li>
+<li>Selected the real prompts and wrote the Stage 2 status for the report.</li></ul></td></tr>
+</table>
+
+<h2>Aleksandr Gordeev</h2>
+<table>
+<tr><th>Area</th><th>Contribution</th></tr>
+<tr><td class="area">Web demo</td><td><ul>
+<li>Deployed the public web demo to GitHub Pages, built in demo mode on every push (PR #27).</li></ul></td></tr>
+<tr><td class="area">iPhone build</td><td><ul>
+<li>Set up the iOS device build in Xcode and verified Google sign-in on a real iPhone running iOS 26.5 (PR #28).</li></ul></td></tr>
+<tr><td class="area">Real-data run</td><td><ul>
+<li>Ran the app against a real Google Health account on an iPhone 17 Pro.</li>
+<li>Captured real steps, Trends and a Coach answer built from real numbers.</li></ul></td></tr>
+<tr><td class="area">Handover and testing</td><td><ul>
+<li>Took over the project from the handoff document.</li>
+<li>Checked the device setup steps on macOS.</li></ul></td></tr>
+<tr><td class="area">Presentation and report</td><td><ul>
+<li>Produced the corrected presentation deck with the real-data slides.</li>
+<li>Wrote the PDF progress report.</li></ul></td></tr>
+</table>
+
+<h2>Shared</h2>
+<ul>
+<li>Product decisions: the "10 seconds" promise, the usual-range design, and a coach that always shows the numbers it used.</li>
+<li>Next week's plan: first Fitbit Air sync, a five-user beta (Stage 7), finishing the security hardening, and re-measuring the coach.</li>
+<li><b>Not done yet:</b> the Stage 2 user interviews were planned but postponed. They will run together with the Stage 7 user test.</li>
+</ul>
+<p class="note">Commit authors on main: 65 commits by Claude sessions run from Oğuz's account, 26 pull-request merges by Houzcetin (Oğuz's GitHub account), 12 direct commits by Oğuz Çetin and 4 by Aleksandr Gordeev.</p>
+
+<div class="sign">
+<div>Oğuz Çetin · signature</div>
+<div>Aleksandr Gordeev · signature</div>
+</div>
+</body>
+</html>
